@@ -1,0 +1,6 @@
+{
+  "name": "Gartenparadies",
+  "description": "Ein moderner Online-Shop für Bewässerung und Pflanzen inkl. Admin-Dashboard.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
