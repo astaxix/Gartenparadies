@@ -8,6 +8,40 @@ interface ArticlesTabProps {
   onUpdateProducts: (products: Product[]) => void;
 }
 
+function LocalPriceInput({ value, onChange, placeholder }: { value: number, onChange: (v: number) => void, placeholder?: string }) {
+  const [localVal, setLocalVal] = useState(value?.toString().replace('.', ',') || '');
+  
+  useEffect(() => {
+    // Only sync if parsed value mismatches to avoid destroying mid-typing states like "0,"
+    const parsedLocal = parseFloat(localVal.replace(',', '.')) || 0;
+    if (parsedLocal !== value && localVal !== '' && !localVal.endsWith(',')) {
+      setLocalVal(value?.toString().replace('.', ','));
+    }
+  }, [value]);
+
+  return (
+    <input 
+      type="text"
+      inputMode="decimal"
+      placeholder={placeholder}
+      value={localVal}
+      onChange={(e) => {
+        setLocalVal(e.target.value);
+        const rawVal = e.target.value.replace(',', '.');
+        const numVal = rawVal === '' || rawVal === '-' ? 0 : (parseFloat(rawVal) || 0);
+        onChange(numVal);
+      }}
+      onBlur={() => {
+        const rawVal = localVal.replace(',', '.');
+        const numVal = rawVal === '' || rawVal === '-' ? 0 : (parseFloat(rawVal) || 0);
+        setLocalVal(numVal.toString().replace('.', ','));
+        onChange(numVal);
+      }}
+      className="w-full border border-gray-300 rounded-md p-1.5 sm:p-2 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none"
+    />
+  );
+}
+
 export default function ArticlesTab({ products, categories, onUpdateProducts }: ArticlesTabProps) {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isCreating, setIsCreating] = useState(false);
@@ -47,21 +81,59 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const url = URL.createObjectURL(file);
-      setPreviewImage(url);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          // Scale down if needed (max 800x800)
+          const MAX_SIZE = 800;
+          if (width > MAX_SIZE || height > MAX_SIZE) {
+            if (width > height) {
+              height *= MAX_SIZE / width;
+              width = MAX_SIZE;
+            } else {
+              width *= MAX_SIZE / height;
+              height = MAX_SIZE;
+            }
+          }
+          canvas.width = Math.round(width);
+          canvas.height = Math.round(height);
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            // Compress to jpeg quality 0.7 to keep size small for Firestore 1MB limit
+            const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+            setPreviewImage(dataUrl);
+          }
+        };
+        if (event.target?.result) {
+          img.src = event.target.result as string;
+        }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
   const handleDocumentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      const newDocs: ProductDocument[] = Array.from(files).map((file: File, i) => ({
-        id: `doc-${Date.now()}-${i}`,
-        name: file.name,
-        // Using object URL to simulate uploaded file
-        url: URL.createObjectURL(file)
-      }));
-      setEditingDocuments([...editingDocuments, ...newDocs]);
+      Array.from(files).forEach((file: File, i) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          if (event.target?.result) {
+            const newDoc: ProductDocument = {
+              id: `doc-${Date.now()}-${i}`,
+              name: file.name,
+              url: event.target.result as string
+            };
+            setEditingDocuments(prev => [...prev, newDoc]);
+          }
+        };
+        reader.readAsDataURL(file);
+      });
     }
     // reset input so same file can be selected again
     if (fileInputRef.current) {
@@ -415,22 +487,16 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
                           />
                           <div className="flex items-center gap-1 w-[140px] shrink-0">
                             <span className="text-xs text-gray-500">+</span>
-                            <input 
-                              type="text"
-                              inputMode="decimal"
+                            <LocalPriceInput 
+                              value={opt.priceDiff}
                               placeholder="0,00"
-                              value={opt.priceDiff.toString().replace('.', ',')}
-                              onChange={(e) => {
+                              onChange={(numVal) => {
                                 const newVars = [...editingVariations];
                                 const newOpts = [...v.options];
-                                const rawVal = e.target.value.replace(',', '.');
-                                // Only parse if valid number format, or allow typing comma
-                                const numVal = rawVal === '' || rawVal === '-' ? 0 : (parseFloat(rawVal) || 0);
                                 newOpts[oIndex] = { ...opt, priceDiff: numVal };
                                 newVars[vIndex] = { ...v, options: newOpts };
                                 setEditingVariations(newVars);
                               }}
-                              className="text-sm border border-gray-300 rounded px-2 py-1.5 w-full outline-none focus:border-purple-500"
                             />
                             <span className="text-xs text-gray-500">€</span>
                           </div>
@@ -524,14 +590,10 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
                           {editingVariations.length > 0 ? 'Rabatt:' : 'Preis/Stück:'}
                         </span>
                         <div className="flex items-center gap-1 w-full">
-                          <input 
-                            type="text"
-                            inputMode="decimal"
-                            value={editingVariations.length > 0 ? tier.discountPercentage?.toString().replace('.', ',') : tier.price?.toString().replace('.', ',')}
-                            onChange={(e) => {
+                          <LocalPriceInput 
+                            value={editingVariations.length > 0 ? (tier.discountPercentage ?? 0) : (tier.price ?? 0)}
+                            onChange={(numVal) => {
                               const newTiers = [...editingVolumeTiers];
-                              const rawVal = e.target.value.replace(',', '.');
-                              const numVal = parseFloat(rawVal) || 0;
                               if (editingVariations.length > 0) {
                                 newTiers[index] = { ...tier, discountPercentage: numVal };
                               } else {
@@ -539,7 +601,6 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
                               }
                               setEditingVolumeTiers(newTiers);
                             }}
-                            className="w-full sm:w-32 border border-gray-300 rounded-md p-1.5 text-sm focus:ring-2 focus:ring-emerald-500 outline-none font-mono"
                           />
                           <span className="text-gray-500 text-sm">{editingVariations.length > 0 ? '%' : '€'}</span>
                         </div>

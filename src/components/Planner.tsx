@@ -897,54 +897,8 @@ export default function Planner({
     }
   };
 
-  const handleExportPDF = async () => {
-    setIsExporting(true);
-    const element = document.getElementById('bom-container');
-    if (!element) {
-      setIsExporting(false);
-      return;
-    }
-    
-    // Store original styles to restore later
-    const originalStyle = element.style.cssText;
-    // Force element to a standard desktop width for PDF rendering so it doesn't wrap weirdly on mobile
-    element.style.width = '800px';
-    element.style.maxWidth = 'none';
-    
-    // Slight pause to ensure fonts/images render
-    await new Promise(r => setTimeout(r, 150));
-
-    try {
-      const canvas = await html2canvas(element, { scale: 1.5, useCORS: true });
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      
-      let heightLeft = pdfHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft > 0) {
-        position -= pageHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
-        heightLeft -= pageHeight;
-      }
-      
-      pdf.save('bewaesserungsplan-artikel.pdf');
-    } catch (e) {
-      console.error("PDF Export failed", e);
-      alert("Fehler beim Erstellen des PDFs.");
-    } finally {
-      // Restore original styling
-      element.style.cssText = originalStyle;
-      setIsExporting(false);
-    }
+  const handleExportPDF = () => {
+    window.print();
   };
 
   if (activeStep === 'canvas') {
@@ -981,16 +935,11 @@ export default function Planner({
             <div className="flex items-center gap-2 sm:gap-3">
               <button 
                 onClick={handleExportPDF}
-                disabled={isExporting}
-                className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl font-semibold transition-colors shadow-sm text-xs sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1.5 sm:px-4 sm:py-2 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 rounded-xl font-semibold transition-colors shadow-sm text-xs sm:text-sm"
               >
-                {isExporting ? (
-                   <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-white rounded-full animate-spin"></span>
-                ) : (
-                   <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> 
-                )}
-                <span className="hidden sm:inline">{isExporting ? 'Wird erstellt...' : 'PDF Exportieren'}</span>
-                <span className="sm:hidden">{isExporting ? 'Bitte warten' : 'PDF'}</span>
+                <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> 
+                <span className="hidden sm:inline">Drucken / PDF</span>
+                <span className="sm:hidden">PDF</span>
               </button>
 
               <div className="relative">

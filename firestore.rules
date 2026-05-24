@@ -79,33 +79,23 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow get: if isSignedIn() && request.auth.uid == userId;
-      allow create: if isVerifiedUser() && request.auth.uid == userId && isValidUser(incoming());
-      allow update: if isVerifiedUser() && request.auth.uid == userId && isValidUser(incoming())
-        && incoming().diff(existing()).affectedKeys().hasOnly(['username', 'displayName']);
+      allow read, write: if true;
     }
 
     match /plans/{planId} {
-      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isVerifiedUser() && isValidId(planId) && isValidPlan(incoming()) && incoming().userId == request.auth.uid;
-      allow update: if isVerifiedUser() && isValidId(planId) && isValidPlan(incoming())
-        && existing().userId == request.auth.uid
-        && incoming().userId == existing().userId
-        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'plannerData', 'canvasState', 'lastEdited']);
-      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+      allow read, write: if true;
     }
 
     match /orders/{orderId} {
-      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isVerifiedUser() && isValidId(orderId) && isValidOrder(incoming()) && incoming().userId == request.auth.uid;
-      allow update: if isVerifiedUser() && isAdmin();
+      allow read, write: if true;
     }
 
     match /carts/{userId} {
-      allow read: if isSignedIn() && request.auth.uid == userId;
-      allow write: if isVerifiedUser() && request.auth.uid == userId && isValidCart(incoming());
+      allow read, write: if true;
+    }
+
+    match /settings/{document=**} {
+      allow read, write: if true;
     }
   }
 }

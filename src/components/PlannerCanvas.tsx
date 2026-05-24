@@ -1943,7 +1943,7 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
         if (currentShape.length > 0) {
           const lastPt = currentShape[currentShape.length - 1];
           const distToLast = Math.hypot(coords.x - lastPt.x, coords.y - lastPt.y);
-          if (distToLast < 5) {
+          if (distToLast < 20 / scale) {
             return; // skip duplicate point
           }
         }
@@ -1971,7 +1971,7 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
         if (currentShape.length > 0) {
           const lastPt = currentShape[currentShape.length - 1];
           const distToLast = Math.hypot(coords.x - lastPt.x, coords.y - lastPt.y);
-          if (distToLast < 5) {
+          if (distToLast < 20 / scale) {
             return; // skip duplicate point
           }
         }

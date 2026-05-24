@@ -64,6 +64,12 @@ function AppContent() {
   useEffect(() => {
     async function loadProducts() {
       try {
+        const settingsRef = doc(db, 'settings', 'shop');
+        const settingsSnap = await getDoc(settingsRef);
+        if (settingsSnap.exists() && settingsSnap.data().categories) {
+          setCategories(settingsSnap.data().categories);
+        }
+
         const querySnapshot = await getDocs(collection(db, 'products'));
         if (!querySnapshot.empty) {
           const loadedProducts = querySnapshot.docs.map(doc => doc.data() as Product);
@@ -95,6 +101,16 @@ function AppContent() {
   };
 
   const [categories, setCategories] = useState<string[]>(['Pflanzen', 'Bodengrund', 'Technik', 'Pflege', 'Futter', 'Planer Artikel']);
+
+  const handleUpdateCategories = async (newCats: string[]) => {
+    setCategories(newCats);
+    try {
+      const settingsRef = doc(db, 'settings', 'shop');
+      await setDoc(settingsRef, { categories: newCats }, { merge: true });
+    } catch (error) {
+      console.error('Failed writing categories to store:', error);
+    }
+  };
 
   // Load user shopping cart from Firestore on login
   useEffect(() => {
@@ -270,7 +286,7 @@ function AppContent() {
               orders={orders}
               onExitAdmin={() => navigate('/')}
               onUpdateProducts={handleUpdateProducts}
-              onUpdateCategories={setCategories}
+              onUpdateCategories={handleUpdateCategories}
             />
           ) : (
             <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
