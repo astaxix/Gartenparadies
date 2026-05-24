@@ -715,12 +715,13 @@ export default function Planner({
     if (reducePressureActive) {
        const exists = defaultList.some(r => r.id === 'planner-pressure-reducer');
        if (!exists) {
+          const p = findPlannerItem('pressure_reducer', 'Premium Druckminderer 1" (Empfohlen bei hohem Druck)');
           defaultList.unshift({
              id: 'planner-pressure-reducer',
-             name: 'Premium Druckminderer 1" (Musterartikel - Empfohlen bei hohem Druck)',
-             price: 34.90,
-             articleNumber: 'PL-PR-MUSTER',
-             category: 'Druckregulierung',
+             name: p.name || 'Premium Druckminderer 1" (Empfohlen bei hohem Druck)',
+             price: p.price > 0 ? p.price : 34.90,
+             articleNumber: p.articleNumber || 'PL-PR-01',
+             category: 'Planer Artikel',
              quantity: 1,
              unit: 'Stk',
              isPressureReducer: true
@@ -791,8 +792,10 @@ export default function Planner({
         reducePressureActive: reducePressureActive || false
       };
 
+      const sanitizedPlan = JSON.parse(JSON.stringify(newPlan));
+
       // Save plan online to Firestore '/plans'
-      await setDoc(doc(db, 'plans', planId), newPlan);
+      await setDoc(doc(db, 'plans', planId), sanitizedPlan);
 
       // Save locally as backup
       let plans = [];
@@ -804,9 +807,9 @@ export default function Planner({
 
       const existingIdx = plans.findIndex((p: any) => p.id === planId);
       if (existingIdx !== -1) {
-        plans[existingIdx] = newPlan;
+        plans[existingIdx] = sanitizedPlan;
       } else {
-        plans.push(newPlan);
+        plans.push(sanitizedPlan);
       }
 
       localStorage.setItem('gartenparadies_saved_plans', JSON.stringify(plans));
@@ -1522,7 +1525,7 @@ export default function Planner({
                           {reducePressureActive && (
                              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs">
                                 <span className="font-bold text-amber-900 block uppercase tracking-wider mb-0.5">Druckregulierung aktiv:</span>
-                                Ein Premium-Druckminderer 1" (Musterartikel) wird Deiner Bestellung hinzugefügt.
+                                Ein passender Druckminderer wird Deiner Bestellung hinzugefügt.
                              </div>
                           )}
 
@@ -1600,7 +1603,7 @@ export default function Planner({
                           {reducePressureActive && (
                              <div className="flex justify-between text-xs text-amber-700">
                                 <span className="uppercase font-bold text-amber-500">Druckregulierung:</span>
-                                <strong className="font-extrabold text-sky-600">Inklusive Premium-Musterartikel</strong>
+                                <strong className="font-extrabold text-sky-600">Druckminderer inklusive</strong>
                              </div>
                           )}
                           <div className="flex justify-between text-xs pt-1.5 border-t border-gray-200/50 font-sans">

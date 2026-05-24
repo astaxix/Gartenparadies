@@ -521,10 +521,20 @@ export default function ShopFront({
                       <div className="space-y-4 text-left p-1 select-none">
                         <p className="text-xs text-slate-500 font-medium">Angemeldet als</p>
                         <p className="text-sm font-bold text-slate-900 border-b pb-2 mb-2 break-all">info@as-mietwagen-service.de</p>
+                        
+                        <button 
+                          onClick={onNavigateToAdmin}
+                          className="w-full font-sans text-left flex items-center justify-center gap-2 px-3 py-2 text-sm text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors cursor-pointer font-semibold mt-2"
+                        >
+                          <User className="w-4 h-4" />
+                          <span>System Administration</span>
+                        </button>
+
                         <button 
                           onClick={async () => {
                             await signOut(auth);
                             setIsUserDropdownOpen(false);
+                            if (setIsAdmin) setIsAdmin(false);
                           }}
                           className="w-full bg-red-50 text-red-600 text-sm font-semibold py-2 rounded-lg hover:bg-red-100 transition-colors font-sans cursor-pointer"
                         >
