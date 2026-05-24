@@ -78,16 +78,16 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
       name: formData.get('name') as string,
       description: formData.get('description') as string,
       shortDescription: formData.get('shortDescription') as string,
-      price: parseFloat(formData.get('price') as string),
+      price: parseFloat((formData.get('price') as string).replace(',', '.')) || 0,
       category: formData.get('category') as string,
       imageUrl: previewImage || formData.get('imageUrl') as string || 'https://images.unsplash.com/photo-1522069169874-c58ec4b76be5?auto=format&fit=crop&q=80&w=400&h=300',
-      stock: parseInt(formData.get('stock') as string, 10),
+      stock: parseInt(formData.get('stock') as string, 10) || 0,
       articleNumber: formData.get('articleNumber') as string,
       metaTitle: formData.get('metaTitle') as string,
       metaDescription: formData.get('metaDescription') as string,
       metaAdsText: formData.get('metaAdsText') as string,
       metaKeywords: formData.get('metaKeywords') as string,
-      weight: parseFloat(formData.get('weight') as string) || 0,
+      weight: parseFloat((formData.get('weight') as string).replace(',', '.')) || 0,
       deliveryStatus: formData.get('deliveryStatus') as string,
       manufacturer: formData.get('manufacturer') as string,
       minOrderQuantity: parseInt(formData.get('minOrderQuantity') as string, 10) || 1,
@@ -416,14 +416,17 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
                           <div className="flex items-center gap-1 w-[140px] shrink-0">
                             <span className="text-xs text-gray-500">+</span>
                             <input 
-                              type="number" 
-                              step="0.01"
-                              placeholder="0.00"
-                              value={opt.priceDiff}
+                              type="text"
+                              inputMode="decimal"
+                              placeholder="0,00"
+                              value={opt.priceDiff.toString().replace('.', ',')}
                               onChange={(e) => {
                                 const newVars = [...editingVariations];
                                 const newOpts = [...v.options];
-                                newOpts[oIndex] = { ...opt, priceDiff: parseFloat(e.target.value) || 0 };
+                                const rawVal = e.target.value.replace(',', '.');
+                                // Only parse if valid number format, or allow typing comma
+                                const numVal = rawVal === '' || rawVal === '-' ? 0 : (parseFloat(rawVal) || 0);
+                                newOpts[oIndex] = { ...opt, priceDiff: numVal };
                                 newVars[vIndex] = { ...v, options: newOpts };
                                 setEditingVariations(newVars);
                               }}
@@ -472,7 +475,7 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
               <div>
                 <label className="block text-xs font-semibold text-emerald-800 uppercase tracking-wider mb-1">Artikelpreis (€)</label>
-                <input name="price" type="number" step="0.01" defaultValue={p.price} required className="w-full border border-emerald-200 rounded-md p-2 text-lg font-mono focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm" />
+                <input name="price" type="text" inputMode="decimal" defaultValue={p.price?.toString().replace('.', ',')} required className="w-full border border-emerald-200 rounded-md p-2 text-lg font-mono focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-emerald-800 uppercase tracking-wider mb-1">Steuerklasse</label>
@@ -522,15 +525,17 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
                         </span>
                         <div className="flex items-center gap-1 w-full">
                           <input 
-                            type="number"
-                            step={editingVariations.length > 0 ? "1" : "0.01"}
-                            value={editingVariations.length > 0 ? tier.discountPercentage ?? 0 : tier.price ?? 0}
+                            type="text"
+                            inputMode="decimal"
+                            value={editingVariations.length > 0 ? tier.discountPercentage?.toString().replace('.', ',') : tier.price?.toString().replace('.', ',')}
                             onChange={(e) => {
                               const newTiers = [...editingVolumeTiers];
+                              const rawVal = e.target.value.replace(',', '.');
+                              const numVal = parseFloat(rawVal) || 0;
                               if (editingVariations.length > 0) {
-                                newTiers[index] = { ...tier, discountPercentage: parseFloat(e.target.value) || 0 };
+                                newTiers[index] = { ...tier, discountPercentage: numVal };
                               } else {
-                                newTiers[index] = { ...tier, price: parseFloat(e.target.value) || 0 };
+                                newTiers[index] = { ...tier, price: numVal };
                               }
                               setEditingVolumeTiers(newTiers);
                             }}
@@ -633,40 +638,43 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="bg-white text-gray-600 border-b border-gray-200">
               <tr>
-                <th className="px-5 py-4 font-medium w-16">Bild</th>
-                <th className="px-5 py-4 font-medium">Art.-Nr.</th>
-                <th className="px-5 py-4 font-medium">Name</th>
-                <th className="px-5 py-4 font-medium">Status</th>
-                <th className="px-5 py-4 font-medium">Kategorie</th>
-                <th className="px-5 py-4 font-medium text-right">Preis</th>
-                <th className="px-5 py-4 font-medium text-right">Bestand</th>
-                <th className="px-5 py-4 font-medium text-center">Aktion</th>
+                <th className="px-3 md:px-5 py-4 font-medium w-16">Bild</th>
+                <th className="px-3 md:px-5 py-4 font-medium hidden sm:table-cell">Art.-Nr.</th>
+                <th className="px-3 md:px-5 py-4 font-medium w-1/3 md:w-auto">Name</th>
+                <th className="px-3 md:px-5 py-4 font-medium hidden md:table-cell">Status</th>
+                <th className="px-3 md:px-5 py-4 font-medium hidden lg:table-cell">Kategorie</th>
+                <th className="px-3 md:px-5 py-4 font-medium text-right">Preis</th>
+                <th className="px-3 md:px-5 py-4 font-medium text-right hidden sm:table-cell">Bestand</th>
+                <th className="px-3 md:px-5 py-4 font-medium text-center">Aktion</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 text-gray-700">
               {products.map(p => (
                 <tr key={p.id} onClick={() => setEditingProduct(p)} className="hover:bg-blue-50/50 transition-colors cursor-pointer">
-                  <td className="px-5 py-3">
+                  <td className="px-3 md:px-5 py-3">
                     <div className="w-10 h-10 rounded overflow-hidden border border-gray-200 bg-white">
                       <img src={p.imageUrl} alt="" className="w-full h-full object-cover" />
                     </div>
                   </td>
-                  <td className="px-5 py-3 font-mono text-xs">{p.articleNumber}</td>
-                  <td className="px-5 py-3 font-medium text-gray-900">{p.name}</td>
-                  <td className="px-5 py-3">
+                  <td className="px-3 md:px-5 py-3 font-mono text-xs hidden sm:table-cell">{p.articleNumber}</td>
+                  <td className="px-3 md:px-5 py-3 font-medium text-gray-900 whitespace-normal min-w-[120px]">
+                    <div className="line-clamp-2">{p.name}</div>
+                    <div className="text-xs text-gray-400 font-normal sm:hidden mt-1">{p.articleNumber}</div>
+                  </td>
+                  <td className="px-3 md:px-5 py-3 hidden md:table-cell">
                     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${p.isActive !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${p.isActive !== false ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
                       {p.isActive !== false ? 'Aktiv' : 'Inaktiv'}
                     </span>
                   </td>
-                  <td className="px-5 py-3"><span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs">{p.category}</span></td>
-                  <td className="px-5 py-3 text-right font-medium">{p.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</td>
-                  <td className="px-5 py-3 text-right">
+                  <td className="px-3 md:px-5 py-3 hidden lg:table-cell"><span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs">{p.category}</span></td>
+                  <td className="px-3 md:px-5 py-3 text-right font-medium">{p.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</td>
+                  <td className="px-3 md:px-5 py-3 text-right hidden sm:table-cell">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${p.stock > 10 ? 'bg-green-100 text-green-800' : p.stock > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
                       {p.stock}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                  <td className="px-3 md:px-5 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-center gap-2">
                        <button onClick={() => setEditingProduct(p)} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors" title="Bearbeiten">
                         <Edit className="w-4 h-4" />

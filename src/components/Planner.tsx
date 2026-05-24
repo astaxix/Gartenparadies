@@ -4,7 +4,7 @@ import { ArrowLeft, Droplets, Map, Sun, CheckCircle, Download, ShoppingCart, Min
 import { motion, AnimatePresence } from 'motion/react';
 import PlannerCanvas, { PlannerData } from './PlannerCanvas';
 import { Product, CartItem } from '../types';
-import jsPDF from 'jspdf';
+import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { db, auth, loginWithGoogle } from '../lib/firebase';
 import { doc, getDoc, setDoc, getDocs, collection, query, where, deleteDoc } from 'firebase/firestore';
@@ -786,7 +786,9 @@ export default function Planner({
         plannerData: {
           ...plannerData,
           pressure: plannerData.pressure || 3.5
-        }
+        },
+        customRows: customRows || null,
+        reducePressureActive: reducePressureActive || false
       };
 
       // Save plan online to Firestore '/plans'
@@ -1739,6 +1741,12 @@ export default function Planner({
                                  if (plan.canvasState) {
                                    setPlannerData(plan.plannerData || null);
                                    setSavedCanvasState(plan.canvasState);
+                                   if (plan.customRows) {
+                                     setCustomRows(plan.customRows);
+                                   } else {
+                                     setCustomRows(null);
+                                   }
+                                   setReducePressureActive(plan.reducePressureActive || false);
                                    setActiveStep('canvas');
                                  }
                                }}
