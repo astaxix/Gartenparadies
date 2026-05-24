@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ShoppingCart, Search, Menu, Leaf, Droplets, ArrowRight, PackageOpen, User, X, ChevronRight, Check, Plus, Minus, Download, FileText, Trash2 } from 'lucide-react';
-import { Product } from '../types';
+import { ShoppingCart, Search, Menu, Leaf, Droplets, ArrowRight, PackageOpen, User, X, ChevronRight, Check, Plus, Minus, Download, FileText, Trash2, Package, Loader2, CornerDownRight } from 'lucide-react';
+import { Product, CategoryNode } from '../types';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -11,9 +11,11 @@ import {
 import { db, auth, loginWithGoogle } from '../lib/firebase';
 import { doc, getDocs, setDoc, deleteDoc, collection, query, where } from 'firebase/firestore';
 
+import { useNavigate, Link } from 'react-router-dom';
+
 interface ShopFrontProps {
   products: Product[];
-  categories: string[];
+  categories: CategoryNode[];
   onAddToCart: (product: Product, variations?: Record<string, string>, quantity?: number) => void;
   cartItemCount: number;
   onOpenCart: () => void;
@@ -36,7 +38,8 @@ export default function ShopFront({
   currentUser,
   setCurrentUser 
 }: ShopFrontProps) {
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const navigate = useNavigate();
+  const [activeCategory, setActiveCategory] = useState<CategoryNode | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
@@ -172,7 +175,7 @@ export default function ShopFront({
     if (loginUsername === 'admin' && loginPassword === 'admin') {
       setIsAdmin(true);
       if (setCurrentUser) {
-        setCurrentUser(null);
+        setCurrentUser({ id: 'admin', email: 'admin', name: 'Administrator', username: 'admin' });
       }
       setIsUserDropdownOpen(false);
       setLoginError('');
@@ -181,12 +184,20 @@ export default function ShopFront({
       return;
     }
     
-    // Normal user login via Firebase Auth
-    const signinEmail = loginUsername.includes('@') ? loginUsername : `${loginUsername}@gartenparadies.com`;
     try {
       setLoginSpinner(true);
+      
+      let signinEmail = loginUsername;
+      if (!loginUsername.includes('@')) {
+        const q = query(collection(db, 'users'), where('username', '==', loginUsername));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          signinEmail = snap.docs[0].data().email;
+        }
+      }
+
       const userCredential = await signInWithEmailAndPassword(auth, signinEmail, loginPassword);
-      setIsAdmin(userCredential.user.email === 'info@as-mietwagen-service.de');
+      setIsAdmin(userCredential.user.email === 'info@as-mietwagen-service.de' || loginUsername === 'admin');
       setIsUserDropdownOpen(false);
       setLoginError('');
       setLoginUsername('');
@@ -257,15 +268,36 @@ export default function ShopFront({
     }
   };
 
+  const getDescendantCategoryIds = (catId: string, allCats: CategoryNode[]): string[] => {
+    const children = allCats.filter(c => c.parentId === catId).map(c => c.id);
+    let descendants = [...children];
+    for (const childId of children) {
+      descendants = [...descendants, ...getDescendantCategoryIds(childId, allCats)];
+    }
+    return descendants;
+  };
+
   const filteredProducts = products.filter(p => {
-    if (p.category === 'Planer Artikel') return false;
+    if (p.category === 'Planer Artikel' || p.categories?.includes('Planer Artikel')) return false;
+
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           p.articleNumber?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = activeCategory ? p.category === activeCategory : true;
+                          
+    let matchesCategory = true;
+    if (activeCategory) {
+      const allowedCategories = [activeCategory.id, ...getDescendantCategoryIds(activeCategory.id, categories)];
+      matchesCategory = (p.categories || [p.category].filter(Boolean)).some(catId => allowedCategories.includes(catId));
+    } else {
+      matchesCategory = !(p.categories || [p.category]).some(id => categories.find(c => c.id === id)?.name === 'Planer Artikel' || id === 'Planer Artikel');
+    }
     return matchesSearch && matchesCategory;
   });
 
-  const displayCategories = categories.filter(c => c !== 'Planer Artikel');
+  const displayCategories = categories.filter(c => c.name !== 'Planer Artikel' && !c.parentId);
+  
+  const currentSubcategories = activeCategory 
+    ? categories.filter(c => c.parentId === activeCategory.id)
+    : displayCategories; // if no active category, we show the top level categories inside the main page before articles
 
 
   return (
@@ -310,12 +342,12 @@ export default function ShopFront({
                       </button>
                     </li>
                     {displayCategories.map(c => (
-                      <li key={c}>
+                      <li key={c.id}>
                         <button 
                           onClick={() => { setActiveCategory(c); setIsCategoryMenuOpen(false); }}
-                          className={`w-full text-left px-4 py-2 text-sm md:text-base hover:bg-emerald-50 hover:text-emerald-700 transition-colors ${activeCategory === c ? 'bg-emerald-50 text-emerald-700 font-medium' : 'text-gray-700'}`}
+                          className={`w-full text-left px-4 py-2 text-sm md:text-base hover:bg-emerald-50 hover:text-emerald-700 transition-colors ${activeCategory?.id === c.id ? 'bg-emerald-50 text-emerald-700 font-medium' : 'text-gray-700'}`}
                         >
-                          {c}
+                          {c.name}
                         </button>
                       </li>
                     ))}
@@ -435,13 +467,12 @@ export default function ShopFront({
                     {currentUser ? (
                       <div className="space-y-3">
                         <div className="pb-2 border-b border-gray-100">
-                          <p className="text-sm font-bold text-gray-850 text-gray-800 font-sans">Hallo, {currentUser.name}!</p>
+                          <p className="text-sm font-bold text-gray-850 text-gray-800 font-sans">Hallo, {currentUser.displayName || currentUser.username || currentUser.name || 'Gartenfreund'}!</p>
                           <p className="text-xs text-gray-500 font-sans">{currentUser.email}</p>
                         </div>
                         <button 
                           onClick={() => {
-                            setIsUserDropdownOpen(false);
-                            setIsSavedPlansModalOpen(true);
+                            navigate('/account/plans');
                           }}
                           className="w-full font-sans text-left flex items-center gap-2 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 rounded-lg transition-colors cursor-pointer font-semibold"
                         >
@@ -449,11 +480,39 @@ export default function ShopFront({
                           <span>Meine Pläne</span>
                         </button>
                         <button 
+                          onClick={() => {
+                            navigate('/account/orders');
+                          }}
+                          className="w-full font-sans text-left flex items-center gap-2 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 rounded-lg transition-colors cursor-pointer font-semibold"
+                        >
+                          <Package className="w-4 h-4 text-emerald-600" />
+                          <span>Meine Bestellungen</span>
+                        </button>
+                        <button 
+                          onClick={() => {
+                            navigate('/account');
+                          }}
+                          className="w-full font-sans text-left flex items-center gap-2 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 rounded-lg transition-colors cursor-pointer font-semibold"
+                        >
+                          <User className="w-4 h-4 text-emerald-600" />
+                          <span>Mein Profil</span>
+                        </button>
+
+                        {isAdmin && (
+                          <button 
+                            onClick={onNavigateToAdmin}
+                            className="w-full font-sans text-left flex items-center gap-2 px-3 py-2 text-sm text-amber-700 hover:bg-amber-50 hover:text-amber-800 rounded-lg transition-colors cursor-pointer font-semibold mt-2"
+                          >
+                            <User className="w-4 h-4" />
+                            <span>System Administration</span>
+                          </button>
+                        )}
+                        <button 
                           onClick={async () => {
                             await signOut(auth);
                             setIsUserDropdownOpen(false);
                           }}
-                          className="w-full bg-red-50 text-red-600 text-sm font-semibold py-2 rounded-lg hover:bg-red-100 transition-colors font-sans cursor-pointer"
+                          className="w-full bg-red-50 text-red-600 text-sm font-semibold py-2 rounded-lg hover:bg-red-100 transition-colors font-sans cursor-pointer mt-2"
                         >
                           Abmelden
                         </button>
@@ -472,78 +531,6 @@ export default function ShopFront({
                           Abmelden
                         </button>
                       </div>
-                    ) : isRegistering ? (
-                      <form onSubmit={handleRegisterSubmit} className="space-y-3 text-sm">
-                        {loginError && (
-                          <div className="bg-red-50 text-red-600 text-xs p-2 rounded border border-red-100">
-                            {loginError}
-                          </div>
-                        )}
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">Benutzername *</label>
-                          <input 
-                            type="text" 
-                            className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
-                            value={regUsername}
-                            onChange={(e) => setRegUsername(e.target.value)}
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">E-Mail *</label>
-                          <input 
-                            type="email" 
-                            className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
-                            value={regEmail}
-                            onChange={(e) => setRegEmail(e.target.value)}
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">Passwort *</label>
-                          <input 
-                            type="password" 
-                            className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
-                            value={regPassword}
-                            onChange={(e) => setRegPassword(e.target.value)}
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">Passwort wiederholen *</label>
-                          <input 
-                            type="password" 
-                            className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
-                            value={regPasswordRepeat}
-                            onChange={(e) => setRegPasswordRepeat(e.target.value)}
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 mb-1">Anzeigename (optional)</label>
-                          <input 
-                            type="text" 
-                            className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
-                            value={regName}
-                            onChange={(e) => setRegName(e.target.value)}
-                          />
-                        </div>
-                        <button 
-                          type="submit"
-                          className="w-full bg-emerald-600 text-white font-bold py-2 rounded-lg hover:bg-emerald-700 transition-colors cursor-pointer text-xs"
-                        >
-                          Registrieren
-                        </button>
-                        <div className="text-center pt-2 border-t border-gray-100">
-                          <button 
-                            type="button" 
-                            onClick={() => { setIsRegistering(false); setLoginError(""); }} 
-                            className="text-xs font-bold text-emerald-600 hover:underline"
-                          >
-                            Zurück zum Login
-                          </button>
-                        </div>
-                      </form>
                     ) : (
                       <form onSubmit={handleLogin} className="space-y-3 sm:space-y-4 text-sm sm:text-base">
                         {loginError && (
@@ -552,12 +539,13 @@ export default function ShopFront({
                           </div>
                         )}
                         <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">Benutzername</label>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">E-Mail oder Benutzername *</label>
                           <input 
                             type="text" 
                             className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
                             value={loginUsername}
                             onChange={(e) => setLoginUsername(e.target.value)}
+                            placeholder="admin oder name@beispiel.de"
                             required
                           />
                         </div>
@@ -572,51 +560,23 @@ export default function ShopFront({
                           />
                         </div>
                         <button 
-                          type="submit"
+                          type="submit" 
                           disabled={loginSpinner}
-                          className="w-full bg-emerald-600 text-white font-medium py-2 rounded-lg hover:bg-emerald-700 transition-colors cursor-pointer disabled:opacity-50"
+                          className="w-full bg-emerald-600 text-white font-bold py-2 sm:py-2.5 rounded-lg hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
                         >
-                          {loginSpinner ? "Wird eingeloggt..." : "Einloggen"}
+                          {loginSpinner ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Anmelden'}
                         </button>
-
-                        <div className="flex items-center my-3">
-                          <div className="flex-1 border-t border-gray-200"></div>
-                          <span className="px-2 text-xs text-gray-400">ODER</span>
-                          <div className="flex-1 border-t border-gray-200"></div>
-                        </div>
-
-                        <button 
-                          type="button"
-                          onClick={async () => {
-                            try {
-                              setLoginSpinner(true);
-                              await loginWithGoogle();
-                              setIsUserDropdownOpen(false);
-                            } catch (error) {
-                              setLoginError("Google Anmeldung fehlgeschlagen.");
-                            } finally {
-                              setLoginSpinner(false);
-                            }
-                          }}
-                          className="w-full flex items-center justify-center gap-2 bg-white border border-gray-300 rounded-lg py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors font-sans cursor-pointer animate-none"
-                        >
-                          <svg className="w-4 h-4" viewBox="0 0 24 24">
-                            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.9h6.6c-.28 1.5-1.11 2.76-2.39 3.63v3.02h3.86c2.26-2.08 3.67-5.14 3.67-8.48z"/>
-                            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3.02c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.34v3.12C3.32 22.01 7.41 24 12 24z"/>
-                            <path fill="#FBBC05" d="M5.27 14.27a7.2 7.2 0 010-4.54V6.61H1.34a11.94 11.94 0 000 10.78l3.93-3.12z"/>
-                            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.93 1.19 15.22 0 12 0 7.41 0 3.32 1.99 1.34 5.61l3.93 3.12c.95-2.85 3.6-4.98 6.73-4.98z"/>
-                          </svg>
-                          <span>Mit Google anmelden</span>
-                        </button>
-
-                        <div className="text-center pt-2 border-t border-gray-100 mt-2">
-                          <p className="text-xs text-gray-500">Noch kein Konto?</p>
+                        <div className="text-center pt-2 sm:pt-3 border-t border-gray-100">
+                          <p className="text-xs text-gray-500 mb-2">Noch kein Konto?</p>
                           <button 
                             type="button" 
-                            onClick={() => { setIsRegistering(true); setLoginError(""); }} 
-                            className="text-xs sm:text-sm font-medium text-emerald-600 hover:underline mt-1 cursor-pointer"
+                            onClick={() => {
+                              setIsUserDropdownOpen(false);
+                              navigate('/register');
+                            }} 
+                            className="w-full bg-white border border-gray-200 text-gray-700 font-bold py-2 rounded-lg hover:bg-gray-50 transition-colors text-xs sm:text-sm cursor-pointer"
                           >
-                            Jetzt registrieren
+                            Jetzt kostenfrei Registrieren
                           </button>
                         </div>
                       </form>
@@ -690,7 +650,7 @@ export default function ShopFront({
     </header>
 
       {/* Hero Section */}
-      <section className="relative bg-emerald-900 text-white overflow-hidden py-32 lg:py-48">
+      <section className="relative bg-emerald-900 text-white overflow-hidden py-16 md:py-24 lg:py-32">
         <div className="absolute inset-0 opacity-40 mix-blend-overlay">
           <img 
             src="https://images.unsplash.com/photo-1558449028-b53a39d100fc?auto=format&fit=crop&q=80&w=2000" 
@@ -750,22 +710,42 @@ export default function ShopFront({
 
           {/* Category Filters */}
           {products.length > 0 && (
-            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3 mt-4">
-              <button 
-                onClick={() => setActiveCategory(null)}
-                className={`px-5 py-2 sm:px-6 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all uppercase tracking-wider ${activeCategory === null ? 'bg-emerald-900 text-white shadow-md shadow-emerald-900/20' : 'bg-white text-gray-600 hover:bg-emerald-50 border border-gray-200 hover:text-emerald-800 hover:border-emerald-200 shadow-sm'}`}
-              >
-                Alle
-              </button>
-              {displayCategories.map(cat => (
+            <div className="flex flex-col gap-4 items-center">
+              {/* Top Level or Siblings */}
+              <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
                 <button 
-                  key={cat}
-                  onClick={() => setActiveCategory(cat)}
-                  className={`px-5 py-2 sm:px-6 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all uppercase tracking-wider ${activeCategory === cat ? 'bg-emerald-900 text-white shadow-md shadow-emerald-900/20' : 'bg-white text-gray-600 hover:bg-emerald-50 border border-gray-200 hover:text-emerald-800 hover:border-emerald-200 shadow-sm'}`}
+                  onClick={() => setActiveCategory(null)}
+                  className={`px-5 py-2 sm:px-6 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all uppercase tracking-wider ${activeCategory === null ? 'bg-emerald-900 text-white shadow-md shadow-emerald-900/20' : 'bg-white text-gray-600 hover:bg-emerald-50 border border-gray-200 hover:text-emerald-800 hover:border-emerald-200 shadow-sm'}`}
                 >
-                  {cat}
+                  Alle
                 </button>
-              ))}
+                {/* Find siblings if we have an active category */}
+                {(activeCategory ? categories.filter(c => c.parentId === activeCategory.parentId) : displayCategories).map(cat => (
+                  <button 
+                    key={cat.id}
+                    onClick={() => setActiveCategory(cat)}
+                    className={`px-5 py-2 sm:px-6 sm:py-2.5 rounded-full text-xs sm:text-sm font-bold transition-all uppercase tracking-wider ${activeCategory?.id === cat.id ? 'bg-emerald-900 text-white shadow-md shadow-emerald-900/20' : 'bg-white text-gray-600 hover:bg-emerald-50 border border-gray-200 hover:text-emerald-800 hover:border-emerald-200 shadow-sm'}`}
+                  >
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+
+              {/* Subcategories if any */}
+              {currentSubcategories.length > 0 && activeCategory && (
+                <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+                  <span className="text-sm font-semibold text-gray-400 mr-2 uppercase tracking-wide flex items-center gap-1"><CornerDownRight className="w-4 h-4" /> Unterkategorien:</span>
+                  {currentSubcategories.map(cat => (
+                    <button 
+                      key={cat.id}
+                      onClick={() => setActiveCategory(cat)}
+                      className="px-4 py-1.5 sm:px-5 sm:py-2 rounded-full text-xs font-bold transition-all uppercase tracking-wider bg-white text-emerald-600 hover:bg-emerald-50 border border-emerald-100 hover:border-emerald-300 shadow-sm"
+                    >
+                      {cat.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -873,11 +853,11 @@ export default function ShopFront({
           <div>
             <h4 className="text-white font-bold mb-6 text-sm uppercase tracking-wider">Rechtliches</h4>
             <ul className="space-y-3 text-sm font-medium">
-              <li><a href="#" className="hover:text-emerald-400 transition-colors">Über uns</a></li>
-              <li><a href="#" className="hover:text-emerald-400 transition-colors">Versand & Zahlung</a></li>
-              <li><a href="#" className="hover:text-emerald-400 transition-colors">Widerrufsrecht</a></li>
-              <li><a href="#" className="hover:text-emerald-400 transition-colors">Datenschutz</a></li>
-              <li><a href="#" className="hover:text-emerald-400 transition-colors">Impressum</a></li>
+              <li><Link to="/legal/agb" className="hover:text-emerald-400 transition-colors">AGB</Link></li>
+              <li><Link to="/legal/versand" className="hover:text-emerald-400 transition-colors">Versand & Zahlung</Link></li>
+              <li><Link to="/legal/widerruf" className="hover:text-emerald-400 transition-colors">Widerrufsrecht</Link></li>
+              <li><Link to="/legal/datenschutz" className="hover:text-emerald-400 transition-colors">Datenschutz</Link></li>
+              <li><Link to="/legal/impressum" className="hover:text-emerald-400 transition-colors">Impressum</Link></li>
             </ul>
           </div>
           <div>

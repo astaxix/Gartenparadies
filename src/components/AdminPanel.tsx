@@ -1,6 +1,6 @@
 import { motion } from 'motion/react';
 import { LayoutDashboard, ShoppingBag, Users, Settings, Tag, FolderTree, LogOut, Search, Bell, Menu, FileText, Package } from 'lucide-react';
-import { Order, Product } from '../types';
+import { Order, Product, CategoryNode } from '../types';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom';
 import ArticlesTab from './admin/ArticlesTab';
@@ -8,11 +8,11 @@ import CategoriesTab from './admin/CategoriesTab';
 
 interface AdminResponsiveProps {
   products: Product[];
-  categories: string[];
+  categories: CategoryNode[];
   orders: Order[];
   onExitAdmin: () => void;
   onUpdateProducts: (products: Product[]) => void;
-  onUpdateCategories: (categories: string[]) => void;
+  onUpdateCategories: (categories: CategoryNode[]) => void;
 }
 
 export default function AdminPanel({ products, categories, orders, onExitAdmin, onUpdateProducts, onUpdateCategories }: AdminResponsiveProps) {

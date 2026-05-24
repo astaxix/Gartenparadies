@@ -864,11 +864,24 @@ export default function Planner({
         return;
       }
 
+      if (loginUsername === 'admin' && loginPassword === 'admin') {
+         if (setCurrentUser) setCurrentUser({ id: 'admin', email: 'admin', name: 'Administrator', username: 'admin' });
+         setIsPlannerAuthModalOpen(false);
+         setSavePlanName(`Plan - ${new Date().toLocaleDateString('de-DE')}`);
+         setIsSaveModalOpen(true);
+         return;
+      }
+
       try {
-        // Here, users can enter either their email or username. 
-        // We evaluate username as an email address.
-        const emailToLogin = loginUsername.includes('@') ? loginUsername : `${loginUsername}@gartenparadies.com`;
-        const userCredential = await signInWithEmailAndPassword(auth, emailToLogin.trim(), loginPassword);
+        let emailToLogin = loginUsername.trim();
+        if (!emailToLogin.includes('@')) {
+           const q = query(collection(db, 'users'), where('username', '==', emailToLogin));
+           const snap = await getDocs(q);
+           if (!snap.empty) {
+               emailToLogin = snap.docs[0].data().email;
+           }
+        }
+        const userCredential = await signInWithEmailAndPassword(auth, emailToLogin, loginPassword);
         const fbUser = userCredential.user;
 
         const docRef = doc(db, 'users', fbUser.uid);

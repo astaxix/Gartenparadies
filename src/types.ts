@@ -9,6 +9,12 @@ export interface ProductVariation {
   options: ProductVariationOption[];
 }
 
+export interface CategoryNode {
+  id: string;
+  name: string;
+  parentId: string | null;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -16,6 +22,7 @@ export interface Product {
   shortDescription?: string;
   price: number;
   category: string;
+  categories?: string[];
   imageUrl: string;
   stock: number;
   articleNumber: string; // EAN / SKU
@@ -32,7 +39,7 @@ export interface Product {
   variations: ProductVariation[];
   volumePricing?: VolumePricing[];
   documents?: ProductDocument[];
-  plannerType?: 'pe_pipe' | 'drip_tube' | 'sprinkler' | 'valve' | 'valve_box' | 'controller' | 'cable' | 'fitting' | 'assembled_box' | 'soft_pipe' | 'connector_25_16' | 'elbow_25_12' | 't_piece_25_12_25' | 'swing_joint' | 'sprinkler_body' | 'rzws' | 'pressure_reducer';
+  plannerType?: 'pe_pipe' | 'drip_tube' | 'sprinkler' | 'valve' | 'valve_box' | 'controller' | 'cable' | 'fitting' | 'assembled_box' | 'soft_pipe' | 'connector_25_16' | 'elbow_25_12' | 't_piece_25_12_25' | 'swing_joint' | 'sprinkler_body' | 'rzws' | 'pressure_reducer' | 'verbinder';
   plannerStations?: number;
   plannerWires?: number;
 }

@@ -4,7 +4,9 @@ import ShopFront from './components/ShopFront';
 import AdminPanel from './components/AdminPanel';
 import CartSidebar from './components/CartSidebar';
 import Planner from './components/Planner';
-import BetaGate from './components/BetaGate';
+import RegisterPage from './components/RegisterPage';
+import UserDashboard from './components/UserDashboard';
+import LegalPage from './components/LegalPage';
 import { initialOrders, initialProducts, plannerProducts } from './data';
 import { CartItem, Product, Order } from './types';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -13,10 +15,22 @@ import { auth, db, handleFirestoreError, OperationType } from './lib/firebase';
 
 function AppContent() {
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(localStorage.getItem('isAdmin') === 'true');
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(JSON.parse(localStorage.getItem('currentUser') || 'null'));
   const [products, setProducts] = useState<Product[]>(plannerProducts);
+
+  useEffect(() => {
+    localStorage.setItem('isAdmin', String(isAdmin));
+  }, [isAdmin]);
+
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('currentUser');
+    }
+  }, [currentUser]);
   const [orders, setOrders] = useState<Order[]>([]);
 
   // Monitor Auth Changes and sync User profile state online
@@ -50,8 +64,15 @@ function AppContent() {
         setCurrentUser(userData);
         setIsAdmin(user.email === 'info@as-mietwagen-service.de');
       } else {
-        setCurrentUser(null);
-        setIsAdmin(false);
+        // Only clear if we are not the local dummy admin
+        setCurrentUser((prev: any) => {
+          if (prev?.id === 'admin') return prev;
+          return null;
+        });
+        setIsAdmin((prev) => {
+          if (prev && localStorage.getItem('isAdmin') === 'true') return true;
+          return false;
+        });
       }
     });
     return () => unsubscribe();
@@ -67,7 +88,9 @@ function AppContent() {
         const settingsRef = doc(db, 'settings', 'shop');
         const settingsSnap = await getDoc(settingsRef);
         if (settingsSnap.exists() && settingsSnap.data().categories) {
-          setCategories(settingsSnap.data().categories);
+          const loaded = settingsSnap.data().categories;
+          const parsed = loaded.map((c: any) => typeof c === 'string' ? { id: c, name: c, parentId: null } : c);
+          setCategories(parsed);
         }
 
         const querySnapshot = await getDocs(collection(db, 'products'));
@@ -100,9 +123,14 @@ function AppContent() {
     }
   };
 
-  const [categories, setCategories] = useState<string[]>(['Pflanzen', 'Bodengrund', 'Technik', 'Pflege', 'Futter', 'Planer Artikel']);
+  const [categories, setCategories] = useState<CategoryNode[]>([
+    { id: 'cat-1', name: 'Pflanzen', parentId: null },
+    { id: 'cat-2', name: 'Bodengrund', parentId: null },
+    { id: 'cat-3', name: 'Technik', parentId: null },
+    { id: 'cat-4', name: 'Planer Artikel', parentId: null }
+  ]);
 
-  const handleUpdateCategories = async (newCats: string[]) => {
+  const handleUpdateCategories = async (newCats: CategoryNode[]) => {
     setCategories(newCats);
     try {
       const settingsRef = doc(db, 'settings', 'shop');
@@ -339,6 +367,11 @@ function AppContent() {
             setCurrentUser={setCurrentUser}
           />
         } />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/legal/:pageId" element={<LegalPage />} />
+        <Route path="/account/*" element={
+          currentUser ? <UserDashboard currentUser={currentUser} /> : <Navigate to="/" replace />
+        } />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
@@ -357,21 +390,6 @@ function AppContent() {
 }
 
 export default function App() {
-  const [isBetaUnlocked, setIsBetaUnlocked] = useState<boolean>(() => {
-    return localStorage.getItem('beta_unlocked') === 'true';
-  });
-
-  if (!isBetaUnlocked) {
-    return (
-      <BetaGate 
-        onUnlock={() => {
-          localStorage.setItem('beta_unlocked', 'true');
-          setIsBetaUnlocked(true);
-        }} 
-      />
-    );
-  }
-
   return (
     <BrowserRouter>
       <AppContent />

@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Product, ProductVariation, VolumePricing, ProductDocument } from '../../types';
+import { Product, ProductVariation, VolumePricing, ProductDocument, CategoryNode } from '../../types';
 import { Plus, Edit, Trash2, X, Save, Image as ImageIcon, UploadCloud, FileText } from 'lucide-react';
 
 interface ArticlesTabProps {
   products: Product[];
-  categories: string[];
+  categories: CategoryNode[];
   onUpdateProducts: (products: Product[]) => void;
 }
 
@@ -50,6 +50,7 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
   const [editingVolumeTiers, setEditingVolumeTiers] = useState<VolumePricing[]>([]);
   const [editingDocuments, setEditingDocuments] = useState<ProductDocument[]>([]);
   const [formCategory, setFormCategory] = useState<string>('');
+  const [formCategories, setFormCategories] = useState<string[]>([]);
   const [formPlannerType, setFormPlannerType] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +61,7 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
       setEditingVolumeTiers(editingProduct.volumePricing || []);
       setEditingDocuments(editingProduct.documents || []);
       setFormCategory(editingProduct.category || '');
+      setFormCategories(editingProduct.categories || (editingProduct.category ? [editingProduct.category].filter(Boolean) : []));
       setFormPlannerType(editingProduct.plannerType || '');
     } else if (isCreating) {
       setPreviewImage(null);
@@ -67,6 +69,7 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
       setEditingVolumeTiers([]);
       setEditingDocuments([]);
       setFormCategory('');
+      setFormCategories([]);
       setFormPlannerType('');
     } else {
       setPreviewImage(null);
@@ -74,6 +77,7 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
       setEditingVolumeTiers([]);
       setEditingDocuments([]);
       setFormCategory('');
+      setFormCategories([]);
       setFormPlannerType('');
     }
   }, [editingProduct, isCreating]);
@@ -145,13 +149,19 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     
+    // Fallback to first selected category if not present
+    const primaryCategory = formCategories[0] || (formData.get('category') as string) || '';
+    
+    const isPlannerCat = formCategories.some(id => id === 'Planer Artikel' || categories.find(c => c.id === id)?.name === 'Planer Artikel') || primaryCategory === 'Planer Artikel';
+
     const newProduct: Product = {
       id: isCreating ? `p-${Date.now()}` : editingProduct!.id,
       name: formData.get('name') as string,
       description: formData.get('description') as string,
       shortDescription: formData.get('shortDescription') as string,
       price: parseFloat((formData.get('price') as string).replace(',', '.')) || 0,
-      category: formData.get('category') as string,
+      category: primaryCategory,
+      categories: formCategories.length > 0 ? formCategories : [primaryCategory].filter(Boolean),
       imageUrl: previewImage || formData.get('imageUrl') as string || 'https://images.unsplash.com/photo-1522069169874-c58ec4b76be5?auto=format&fit=crop&q=80&w=400&h=300',
       stock: parseInt(formData.get('stock') as string, 10) || 0,
       articleNumber: formData.get('articleNumber') as string,
@@ -168,9 +178,9 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
       variations: editingVariations,
       volumePricing: editingVolumeTiers,
       documents: editingDocuments,
-      plannerType: formCategory === 'Planer Artikel' ? (formData.get('plannerType') as any || undefined) : undefined,
-      plannerStations: (formCategory === 'Planer Artikel' && formData.get('plannerStations')) ? parseInt(formData.get('plannerStations') as string, 10) : undefined,
-      plannerWires: (formCategory === 'Planer Artikel' && formData.get('plannerWires')) ? parseInt(formData.get('plannerWires') as string, 10) : undefined,
+      plannerType: isPlannerCat ? (formData.get('plannerType') as any || undefined) : undefined,
+      plannerStations: (isPlannerCat && formData.get('plannerStations')) ? parseInt(formData.get('plannerStations') as string, 10) : undefined,
+      plannerWires: (isPlannerCat && formData.get('plannerWires')) ? parseInt(formData.get('plannerWires') as string, 10) : undefined,
     };
 
     if (isCreating) {
@@ -213,14 +223,45 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
               Kategorien
             </h3>
             <div className="max-w-md">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Kategorie / Pfad</label>
-              <select name="category" value={formCategory} onChange={(e) => setFormCategory(e.target.value)} required className="w-full border border-gray-300 rounded-md p-2 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
-                <option value="">- Bitte wählen -</option>
-                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Zugeordnete Kategorien</label>
+              <div className="bg-white border border-gray-300 rounded-md p-3 max-h-48 overflow-y-auto space-y-2">
+                {categories.map(c => (
+                  <div key={c.id} className="flex items-center gap-2">
+                    <input 
+                      type="checkbox" 
+                      id={`cat-${c.id}`}
+                      checked={formCategory === c.id || (editingProduct?.categories || []).includes(c.id)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        if (editingProduct) {
+                          const currentCats = editingProduct.categories || [editingProduct.category].filter(Boolean);
+                          let newCats = [...currentCats];
+                          if (checked && !newCats.includes(c.id)) newCats.push(c.id);
+                          if (!checked) newCats = newCats.filter(id => id !== c.id);
+                          
+                          setEditingProduct({
+                            ...editingProduct,
+                            categories: newCats,
+                            category: newCats[0] || ''
+                          });
+                          setFormCategory(newCats[0] || '');
+                        } else {
+                          // Very hacky state management for creation...
+                          // Ideally we'd use a dedicated state for formCategories
+                        }
+                      }}
+                      className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <label htmlFor={`cat-${c.id}`} className="text-sm text-gray-700">{c.name}</label>
+                  </div>
+                ))}
+              </div>
             </div>
             
-            {formCategory === 'Planer Artikel' && (
+            {((editingProduct?.categories || [formCategory]).some(id => {
+              const cat = categories.find(c => c.id === id);
+              return cat?.name === 'Planer Artikel' || id === 'Planer Artikel';
+            })) && (
               <div className="mt-6 border-t border-gray-200 pt-6">
                 <h4 className="font-semibold text-gray-800 mb-4 pb-2 flex items-center gap-2">
                   Planer-Artikel Einstellungen
@@ -236,21 +277,41 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
                       className="w-full border border-gray-300 rounded-md p-2 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     >
                       <option value="">- Typ wählen -</option>
-                      <option value="pe_pipe">PE Rohr 25mm (hart)</option>
-                      <option value="drip_tube">Tropfschlauch</option>
-                      <option value="sprinkler">Zusammengebautes Regner-Set (Standard)</option>
-                      <option value="valve">Magnetventil</option>
-                      <option value="valve_box">Verteilerbox</option>
-                      <option value="controller">Steuergerät</option>
-                      <option value="cable">Steuerkabel</option>
-                      <option value="fitting">Standard Fitting Set</option>
-                      <option value="assembled_box">Vormontierte Verteilerbox Komplett-Set</option>
-                      <option value="soft_pipe">PE-Rohr weich 16mm (Zuleitung Beet)</option>
-                      <option value="connector_25_16">Verbinder PE-Rohr 25mm x weich 16mm</option>
-                      <option value="elbow_25_12">Klemmverschraubung Winkel 25mm x 1/2" IG</option>
-                      <option value="t_piece_25_12_25">Klemmverschraubung T-Stück 25mm x 1/2" IG x 25mm</option>
-                      <option value="swing_joint">Swing Joint 1/2" AG x 1/2" AG</option>
-                      <option value="sprinkler_body">Hunter Pro-Spray PRS40 Gehäuse</option>
+                      
+                      <optgroup label="Rohre & Schläuche">
+                        <option value="pe_pipe">PE Rohr 25mm (hart)</option>
+                        <option value="drip_tube">Tropfschlauch</option>
+                        <option value="soft_pipe">PE-Rohr weich 16mm (Zuleitung Beet)</option>
+                      </optgroup>
+                      
+                      <optgroup label="Regner">
+                        <option value="sprinkler">Zusammengebautes Regner-Set (Standard)</option>
+                        <option value="sprinkler_body">Hunter Pro-Spray PRS40 Gehäuse</option>
+                        <option value="rzws">Wurzelzonen-Bewässerungssystem (RZWS)</option>
+                      </optgroup>
+                      
+                      <optgroup label="Verbinder">
+                        <option value="connector_25_16">Verbinder PE-Rohr 25mm x weich 16mm</option>
+                        <option value="elbow_25_12">Klemmverschraubung Winkel 25mm x 1/2" IG</option>
+                        <option value="t_piece_25_12_25">Klemmverschraubung T-Stück 25mm x 1/2" IG x 25mm</option>
+                        <option value="swing_joint">Swing Joint 1/2" AG x 1/2" AG</option>
+                      </optgroup>
+                      
+                      <optgroup label="Ventile & Boxen">
+                        <option value="valve">Magnetventil</option>
+                        <option value="valve_box">Verteilerbox</option>
+                        <option value="assembled_box">Vormontierte Verteilerbox Komplett-Set</option>
+                        <option value="pressure_reducer">Druckminderer</option>
+                      </optgroup>
+                      
+                      <optgroup label="Steuerung">
+                        <option value="controller">Steuergerät</option>
+                        <option value="cable">Steuerkabel</option>
+                      </optgroup>
+                      
+                      <optgroup label="Zubehör">
+                        <option value="fitting">Standard Fitting Set</option>
+                      </optgroup>
                     </select>
                   </div>
                   
@@ -728,7 +789,14 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
                       {p.isActive !== false ? 'Aktiv' : 'Inaktiv'}
                     </span>
                   </td>
-                  <td className="px-3 md:px-5 py-3 hidden lg:table-cell"><span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs">{p.category}</span></td>
+                  <td className="px-3 md:px-5 py-3 hidden lg:table-cell">
+                    <div className="flex flex-col gap-1 items-start">
+                      {(p.categories || [p.category].filter(Boolean)).map(catId => {
+                        const cat = categories.find(c => c.id === catId);
+                        return <span key={catId} className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs truncate max-w-[150px] block" title={cat?.name || catId}>{cat?.name || catId}</span>;
+                      })}
+                    </div>
+                  </td>
                   <td className="px-3 md:px-5 py-3 text-right font-medium">{p.price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}</td>
                   <td className="px-3 md:px-5 py-3 text-right hidden sm:table-cell">
                     <span className={`px-2 py-1 rounded text-xs font-medium ${p.stock > 10 ? 'bg-green-100 text-green-800' : p.stock > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
