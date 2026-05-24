@@ -139,6 +139,220 @@ function findSafePath(start: Point, end: Point, avoidShapes: Shape[]): Point[] {
   return bestOption;
 }
 
+function getNozzleData(rPx: number, angleDeg: number, selectedModel?: string) {
+  let rMeters = rPx / PIXELS_PER_METER;
+  
+  // Clean angle within 45 to 360
+  let normAngle = Math.max(45, Math.min(360, Math.round(angleDeg)));
+  
+  // Choose base model based on selectedModel parameter or auto-detect
+  let baseModel = selectedModel || 'auto';
+  if (baseModel === 'auto') {
+    if (rMeters < 2.5) {
+      baseModel = "MP800SR";
+    } else if (rMeters <= 4.5 && normAngle <= 105) {
+      baseModel = "MP Corner";
+    } else if (rMeters <= 4.5) {
+      baseModel = "MP1000";
+    } else if (rMeters <= 4.9) {
+      baseModel = "MP815";
+    } else if (rMeters <= 6.4) {
+      baseModel = "MP2000";
+    } else if (rMeters <= 9.1) {
+      baseModel = "MP3000";
+    } else {
+      baseModel = "MP3500";
+    }
+  }
+
+  // Let's implement the matching schema based on model choice and angle:
+  let nozzleId = "";
+  let name = "";
+  let minR = 1.1;
+  let maxR = 10.7;
+  let minAngle = 90;
+  let maxAngle = 210;
+  let nozzleColor = "";
+  let colorHex = "#1d4ed8"; // default blue
+  
+  if (baseModel === "MP800SR") {
+    minR = 1.8;
+    maxR = 3.5;
+    if (normAngle >= 315) {
+      nozzleId = "MP800SR-360";
+      name = "MP800SR-360";
+      minAngle = 360;
+      maxAngle = 360;
+      nozzleColor = "Gelbgrün";
+      colorHex = "#84cc16"; // lime-500
+    } else {
+      nozzleId = "MP800SR-90";
+      name = "MP800SR-90";
+      minAngle = 90;
+      maxAngle = 210;
+      nozzleColor = "Orange";
+      colorHex = "#f97316"; // orange-500
+    }
+  } else if (baseModel === "MP Corner" || baseModel === "MP-Corner") {
+    nozzleId = "MP-Corner";
+    name = "MP-Corner";
+    minR = 2.5;
+    maxR = 4.5;
+    minAngle = 45;
+    maxAngle = 105;
+    nozzleColor = "Türkis";
+    colorHex = "#06b6d4"; // cyan-500
+  } else if (baseModel === "MP1000") {
+    minR = 2.5;
+    maxR = 4.5;
+    if (normAngle >= 315) {
+      nozzleId = "MP1000-360";
+      name = "MP1000 360";
+      minAngle = 360;
+      maxAngle = 360;
+      nozzleColor = "Grün";
+      colorHex = "#22c55e"; // green-500
+    } else if (normAngle > 210) {
+      nozzleId = "MP1000-210";
+      name = "MP1000-210";
+      minAngle = 210;
+      maxAngle = 270;
+      nozzleColor = "Braun";
+      colorHex = "#78350f"; // brown
+    } else {
+      nozzleId = "MP1000-90";
+      name = "MP1000-90";
+      minAngle = 90;
+      maxAngle = 210;
+      nozzleColor = "Braun/Maroon";
+      colorHex = "#9a3412"; // maroon / orange-red
+    }
+  } else if (baseModel === "MP815") {
+    minR = 2.5;
+    maxR = 4.9;
+    if (normAngle >= 315) {
+      nozzleId = "MP815-360";
+      name = "MP815-360";
+      minAngle = 360;
+      maxAngle = 360;
+      nozzleColor = "Grau";
+      colorHex = "#64748b"; // slate-500
+    } else if (normAngle > 210) {
+      nozzleId = "MP815-210";
+      name = "MP815-210";
+      minAngle = 210;
+      maxAngle = 270;
+      nozzleColor = "Blau-Grau";
+      colorHex = "#475569"; // slate-600
+    } else {
+      nozzleId = "MP815-90";
+      name = "MP815-90";
+      minAngle = 90;
+      maxAngle = 210;
+      nozzleColor = "Hellblau";
+      colorHex = "#38bdf8"; // sky-400
+    }
+  } else if (baseModel === "MP2000") {
+    minR = 4.0;
+    maxR = 6.4;
+    if (normAngle >= 315) {
+      nozzleId = "MP2000-360";
+      name = "MP2000 360";
+      minAngle = 360;
+      maxAngle = 360;
+      nozzleColor = "Rot";
+      colorHex = "#ef4444"; // red-500
+    } else if (normAngle > 210) {
+      nozzleId = "MP2000-210";
+      name = "MP2000-210";
+      minAngle = 210;
+      maxAngle = 270;
+      nozzleColor = "Grün";
+      colorHex = "#16a34a"; // green-600
+    } else {
+      nozzleId = "MP2000-90";
+      name = "MP2000 90-210";
+      minAngle = 90;
+      maxAngle = 210;
+      nozzleColor = "Schwarz";
+      colorHex = "#1e293b"; // slate-800
+    }
+  } else if (baseModel === "MP3000") {
+    minR = 6.7;
+    maxR = 9.1;
+    if (normAngle >= 315) {
+      nozzleId = "MP3000-360";
+      name = "MP3000 360";
+      minAngle = 360;
+      maxAngle = 360;
+      nozzleColor = "Schwarz/Rot";
+      colorHex = "#581c87"; // black-red representation
+    } else if (normAngle > 210) {
+      nozzleId = "MP3000-210";
+      name = "MP3000-210";
+      minAngle = 210;
+      maxAngle = 270;
+      nozzleColor = "Gelb";
+      colorHex = "#eab308"; // yellow-500
+    } else {
+      nozzleId = "MP3000-90";
+      name = "MP3000-90";
+      minAngle = 90;
+      maxAngle = 210;
+      nozzleColor = "Blau";
+      colorHex = "#2563eb"; // blue-600
+    }
+  } else {
+    // MP3500 series (from 9.4m up to 10.7m, only has 90°-210° model)
+    baseModel = "MP3500";
+    minR = 9.4;
+    maxR = 10.7;
+    nozzleId = "MP3500-90";
+    name = "MP3500 90-210";
+    minAngle = 90;
+    maxAngle = 210;
+    nozzleColor = "Hellbraun";
+    colorHex = "#ca8a04"; // warm yellow/brown
+  }
+
+  let clampedMeters = Math.max(minR, Math.min(maxR, rMeters));
+  let isOutOfBounds = rMeters < minR || rMeters > maxR;
+  let physicalAngle = Math.max(minAngle, Math.min(maxAngle, normAngle));
+  
+  let labelForDevice = name;
+  if (baseModel !== "MP Corner" && baseModel !== "MP-Corner" && !labelForDevice.includes("/PRS30")) {
+    labelForDevice = `${labelForDevice}/PRS30`;
+  }
+  if (labelForDevice === "MP-Corner") {
+     labelForDevice = "MP-Corner/PRS30";
+  }
+
+  // Real precip rate: 20 mm/h for MP800 & MP815, 10 mm/h for standard MP series
+  const precipRate = (baseModel === 'MP800SR' || baseModel === 'MP815') ? 20 : 10;
+  const area = Math.PI * clampedMeters * clampedMeters * (physicalAngle / 360);
+  const flowM3H = (area * precipRate) / 1000;
+  const flowLpm = (flowM3H * 1000) / 60;
+
+  return {
+    name: labelForDevice,
+    radiusPx: clampedMeters * PIXELS_PER_METER,
+    flowLpm: flowLpm,
+    model: baseModel,
+    nozzleId: nozzleId,
+    minR: minR,
+    maxR: maxR,
+    isOutOfBounds: isOutOfBounds,
+    physicalAngle: physicalAngle,
+    colorName: nozzleColor,
+    colorHex: colorHex
+  };
+}
+
+function getRealisticNozzleLabel(sp: { r: number; angleDeg: number; selectedModel?: string }) {
+  const nz = getNozzleData(sp.r, sp.angleDeg, sp.selectedModel);
+  return nz.name;
+}
+
 function calculateArea(shape: Shape): number {
   if (shape.points.length < 2) return 0;
   
@@ -230,6 +444,8 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
   const [manualDripLines, setManualDripLines] = useState<any[]>([]);
   const [manualRzws, setManualRzws] = useState<any[]>([]);
   const [isDraggingRadius, setIsDraggingRadius] = useState<boolean>(false);
+  const [isDraggingAngle, setIsDraggingAngle] = useState<boolean>(false);
+  const [isDraggingAngleStart, setIsDraggingAngleStart] = useState<boolean>(false);
 
   // Sizing and Pressure Loss States
   const [elevationDiff, setElevationDiff] = useState<number>(0);
@@ -241,87 +457,57 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
   const [sprinklers, setSprinklers] = useState<any[]>([]);
   const [pipes, setPipes] = useState<{points: Point[], color: string, id?: string}[]>([]);
 
-  const getNozzleData = (rPx: number, angleDeg: number) => {
-      let rMeters = rPx / PIXELS_PER_METER;
-      if (rMeters < 1.1) rMeters = 1.1;
-      if (rMeters > 10.7) rMeters = 10.7;
+  const handleUpdateSprinklerModel = (modelId: string) => {
+    if (selectedSprinklerIdx === null || !sprinklers[selectedSprinklerIdx]) return;
+    const sp = sprinklers[selectedSprinklerIdx];
+    
+    // Evaluate nozzle data based on the desired model and current state
+    const nz = getNozzleData(sp.r, sp.angleDeg, modelId);
+    
+    const physicalAngle = nz.physicalAngle;
+    let isFullCircle = physicalAngle >= 359;
+    let angleStart = sp.angleStart; 
+    let angleEnd = isFullCircle ? Math.PI * 2 : (angleStart + (physicalAngle * Math.PI / 180));
+    let largeArc = physicalAngle > 180 ? 1 : 0;
 
-      let base = "";
-      if (rMeters <= 1.8) {
-         base = `MP800SR`;
-      } else if (rMeters <= 4.0) {
-         if (angleDeg >= 45 && angleDeg <= 105 && rMeters > 2.5) base = `MP Corner`;
-         else base = `MP1000`;
-      } else if (rMeters <= 4.6) {
-         base = `MP815`;
-      } else if (rMeters <= 6.4) {
-         base = `MP2000`;
-      } else if (rMeters <= 9.1) {
-         base = `MP3000`;
-      } else {
-         base = `MP3500`;
-      }
-
-      let typeDesc = "";
-      let minAngle = 90;
-      let maxAngle = 210;
-
-      if (base === 'MP Corner') {
-         typeDesc = "Corner";
-         minAngle = 45;
-         maxAngle = 105;
-      } else if (angleDeg >= 300) {
-         typeDesc = "360°";
-         minAngle = 360;
-         maxAngle = 360;
-      } else if (angleDeg > 210) {
-         typeDesc = "210°-270°";
-         minAngle = 210;
-         maxAngle = 270;
-      } else {
-         typeDesc = "90°-210°";
-         minAngle = 90;
-         maxAngle = 210;
-      }
-
-      // Clamp angle based on the selected nozzle's actual physical capability range
-      let physicalAngle = Math.max(minAngle, Math.min(maxAngle, angleDeg));
-      
-      let finalName = base === 'MP Corner' 
-         ? `MP Corner (${Math.round(physicalAngle)}°)` 
-         : `${base} ${typeDesc} (${Math.round(physicalAngle)}°)`;
-      
-      let area = Math.PI * rMeters * rMeters * (physicalAngle / 360);
-      let flowLpm = (10 * area) / 60;
-
-      return { 
-         name: finalName, 
-         radiusPx: rMeters * PIXELS_PER_METER,
-         flowLpm: flowLpm
-      };
+    const updated = [...sprinklers];
+    updated[selectedSprinklerIdx] = {
+      ...sp,
+      r: nz.radiusPx,
+      angleDeg: physicalAngle,
+      angleEnd: angleEnd,
+      largeArc: largeArc,
+      label: nz.name,
+      flowLpm: nz.flowLpm,
+      selectedModel: modelId,
+      zoneColor: nz.colorHex
+    };
+    setSprinklers(updated);
   };
 
   const handleUpdateSprinklerAngle = (newAngle: number) => {
     if (selectedSprinklerIdx === null || !sprinklers[selectedSprinklerIdx]) return;
     const sp = sprinklers[selectedSprinklerIdx];
-    const nz = getNozzleData(sp.r, newAngle);
+    const nz = getNozzleData(sp.r, newAngle, sp.selectedModel);
     
     const updated = [...sprinklers];
     
-    let isFullCircle = newAngle >= 359;
+    const physicalAngle = nz.physicalAngle;
+    let isFullCircle = physicalAngle >= 359;
     let angleStart = sp.angleStart; 
-    let angleEnd = isFullCircle ? Math.PI * 2 : (angleStart + (newAngle * Math.PI / 180));
-    let largeArc = newAngle > 180 ? 1 : 0;
+    let angleEnd = isFullCircle ? Math.PI * 2 : (angleStart + (physicalAngle * Math.PI / 180));
+    let largeArc = physicalAngle > 180 ? 1 : 0;
     
     updated[selectedSprinklerIdx] = {
       ...sp,
-      angleDeg: newAngle,
+      angleDeg: physicalAngle,
       angleStart: angleStart,
       angleEnd: angleEnd,
       largeArc: largeArc,
       label: nz.name,
       flowLpm: nz.flowLpm,
-      r: nz.radiusPx
+      r: nz.radiusPx,
+      selectedModel: nz.model
     };
     
     setSprinklers(updated);
@@ -330,14 +516,24 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
   const handleUpdateSprinklerRadius = (newRadiusM: number) => {
     if (selectedSprinklerIdx === null || !sprinklers[selectedSprinklerIdx]) return;
     const sp = sprinklers[selectedSprinklerIdx];
-    const nz = getNozzleData(newRadiusM * PIXELS_PER_METER, sp.angleDeg);
+    const nz = getNozzleData(newRadiusM * PIXELS_PER_METER, sp.angleDeg, sp.selectedModel);
     
+    const physicalAngle = nz.physicalAngle;
+    let isFullCircle = physicalAngle >= 359;
+    let angleStart = sp.angleStart; 
+    let angleEnd = isFullCircle ? Math.PI * 2 : (angleStart + (physicalAngle * Math.PI / 180));
+    let largeArc = physicalAngle > 180 ? 1 : 0;
+
     const updated = [...sprinklers];
     updated[selectedSprinklerIdx] = {
       ...sp,
       r: nz.radiusPx,
+      angleDeg: physicalAngle,
+      angleEnd: angleEnd,
+      largeArc: largeArc,
       label: nz.name,
-      flowLpm: nz.flowLpm
+      flowLpm: nz.flowLpm,
+      selectedModel: nz.model
     };
     setSprinklers(updated);
   };
@@ -838,26 +1034,21 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
     let valveBoxes = infraNodes.filter(n => n.type === 'valve_box');
     let controllers = infraNodes.filter(n => n.type === 'controller');
 
-    let updatedInfra = [...infraNodes];
     if (sources.length === 0) {
-      const defaultPt = shapes[0]?.points[0] || { x: 100, y: 100 };
-      const newSource = { id: 'source-fallback', type: 'water_source' as const, pos: { x: defaultPt.x - 50, y: defaultPt.y } };
-      updatedInfra.push(newSource);
-      sources = [newSource];
+      alert("Bitte platziere zuerst einen Wasseranschluss auf der Zeichnung!");
+      setTool('water_source');
+      return;
     }
     if (valveBoxes.length === 0) {
-      const src = sources[0];
-      const newValve = { id: 'valve-fallback', type: 'valve_box' as const, pos: { x: src.pos.x + 30, y: src.pos.y } };
-      updatedInfra.push(newValve);
-      valveBoxes = [newValve];
+      alert("Bitte platziere zuerst eine Verteilerbox (Zonenventile) auf der Zeichnung!");
+      setTool('valve_box');
+      return;
     }
     if (controllers.length === 0) {
-      const src = sources[0];
-      const newCtrl = { id: 'controller-fallback', type: 'controller' as const, pos: { x: src.pos.x, y: src.pos.y - 30 } };
-      updatedInfra.push(newCtrl);
-      controllers = [newCtrl];
+      alert("Bitte platziere zuerst ein Steuergerät (Computer) auf der Zeichnung!");
+      setTool('controller');
+      return;
     }
-    setInfraNodes(updatedInfra);
 
     const finalPipes: any[] = [];
 
@@ -909,6 +1100,145 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
     setShowStats(true);
     setTool('pan');
     setStep('calculation');
+  };
+
+  const triggerOptionalAutoPlan = () => {
+    const valveBoxes = infraNodes.filter(n => n.type === 'valve_box');
+    if (valveBoxes.length === 0) {
+      alert("Bitte platziere zuerst eine Verteilerbox auf der Zeichnung, um die automatische Bestückung zu starten!");
+      setTool('valve_box');
+      return;
+    }
+    const waterSources = infraNodes.filter(n => n.type === 'water_source');
+    if (waterSources.length === 0) {
+      alert("Bitte platziere zuerst einen Wasseranschluss auf der Zeichnung, um die automatische Bestückung zu starten!");
+      setTool('water_source');
+      return;
+    }
+    const vb = valveBoxes[0].pos;
+    
+    let newSprinklers: any[] = [];
+    
+    shapes.filter(s => s.areaType === 'lawn').forEach(s => {
+       let pts = [...s.points].map(p => ({...p}));
+       if (s.type === 'rectangle' && pts.length === 2) {
+           const minX = Math.min(pts[0].x, pts[1].x);
+           const maxX = Math.max(pts[0].x, pts[1].x);
+           const minY = Math.min(pts[0].y, pts[1].y);
+           const maxY = Math.max(pts[0].y, pts[1].y);
+           pts = [ {x:minX,y:minY}, {x:maxX,y:minY}, {x:maxX,y:maxY}, {x:minX,y:maxY} ];
+       }
+
+       if (s.type === 'circle' && pts.length === 2) {
+           const [center, edge] = pts;
+           const rPx = Math.hypot(edge.x - center.x, edge.y - center.y);
+           const nz = getNozzleData(rPx, 360);
+           newSprinklers.push({
+               shapeId: s.id,
+               id: 'sp-auto-' + s.id + '-' + Date.now(),
+               x: center.x, y: center.y, r: nz.radiusPx, 
+               angleStart: 0, angleEnd: 0, sweepFlag: 1, largeArc: 1, angleDeg: 360, label: nz.name,
+               flowLpm: nz.flowLpm,
+               isManual: true,
+               zoneColor: nz.colorHex
+           });
+           return; 
+       }
+       
+       let sum = 0;
+       for(let i=0; i<pts.length; i++) {
+          let p1 = pts[i];
+          let p2 = pts[(i+1)%pts.length];
+          sum += (p2.x - p1.x)*(p2.y + p1.y);
+       }
+       const isClockwise = sum < 0;
+       
+       let minX = Math.min(...pts.map(p => p.x));
+       let maxX = Math.max(...pts.map(p => p.x));
+       let minY = Math.min(...pts.map(p => p.y));
+       let maxY = Math.max(...pts.map(p => p.y));
+       let bboxMin = Math.min(maxX - minX, maxY - minY);
+       let targetR = Math.min(bboxMin, 10.7 * PIXELS_PER_METER);
+       if (targetR < 2 * PIXELS_PER_METER) targetR = 2 * PIXELS_PER_METER;
+
+       for(let i=0; i<pts.length; i++) {
+           let pPrev = pts[(i - 1 + pts.length) % pts.length];
+           let pCurr = pts[i];
+           let pNext = pts[(i + 1) % pts.length];
+           
+           let aNext = Math.atan2(pNext.y - pCurr.y, pNext.x - pCurr.x);
+           let aPrev = Math.atan2(pPrev.y - pCurr.y, pPrev.x - pCurr.x);
+           
+           let sweepFlag = isClockwise ? 1 : 0;
+           let diff = isClockwise ? (aPrev - aNext) : (aNext - aPrev);
+           
+           while (diff <= 0) diff += 2 * Math.PI;
+           while (diff > 2 * Math.PI) diff -= 2 * Math.PI;
+           
+           let largeArc = diff > Math.PI ? 1 : 0;
+           let distNext = Math.hypot(pNext.x - pCurr.x, pNext.y - pCurr.y);
+           
+           const angleDeg = diff * 180 / Math.PI;
+           const nz = getNozzleData(targetR, angleDeg);
+           let r = nz.radiusPx;
+           
+           newSprinklers.push({
+              shapeId: s.id,
+              id: 'sp-auto-' + s.id + '-' + i + '-' + Date.now(),
+              x: pCurr.x, 
+              y: pCurr.y, 
+              r: r,
+              angleStart: aNext,
+              angleEnd: aPrev,
+              sweepFlag: sweepFlag,
+              largeArc: largeArc,
+              angleDeg: (diff * 180 / Math.PI),
+              label: nz.name,
+              flowLpm: nz.flowLpm,
+              isManual: true,
+              zoneColor: nz.colorHex
+           });
+
+           if (distNext > targetR * 1.2) { 
+               const numSegments = Math.ceil(distNext / targetR);
+               const numIntermediate = numSegments - 1; 
+               if (numIntermediate > 0) {
+                   const spacing = distNext / numSegments;
+                   for (let j = 1; j <= numIntermediate; j++) {
+                       let frac = j / numSegments;
+                       let midX = pCurr.x + (pNext.x - pCurr.x) * frac;
+                       let midY = pCurr.y + (pNext.y - pCurr.y) * frac;
+                       
+                       let lineAngle = Math.atan2(pNext.y - pCurr.y, pNext.x - pCurr.x);
+                       let midAngleStart = lineAngle;
+                       let midAngleEnd = lineAngle + Math.PI;
+                       if (!isClockwise) {
+                           midAngleStart = lineAngle + Math.PI;
+                           midAngleEnd = lineAngle;
+                       }
+                       const midNz = getNozzleData(spacing, 180);
+                       newSprinklers.push({
+                           shapeId: s.id,
+                           id: 'sp-auto-mid-' + s.id + '-' + i + '-' + j + '-' + Date.now(),
+                           x: midX, y: midY, r: midNz.radiusPx,
+                           angleStart: midAngleStart,
+                           angleEnd: midAngleEnd,
+                           sweepFlag: isClockwise ? 1 : 0,
+                           largeArc: 0,
+                           angleDeg: 180,
+                           label: midNz.name,
+                           flowLpm: midNz.flowLpm,
+                           isManual: true,
+                           zoneColor: midNz.colorHex
+                       });
+                   }
+               }
+            }
+       }
+    });
+
+    setSprinklers(newSprinklers);
+    alert("Die Regner wurden erfolgreich automatisch geplant! Du kannst jetzt jeden einzelnen Regner anklicken und seinen Winkel und Radius direkt am Kreis verschieben.");
   };
 
   // Dynamic Sizing & Pressure Loss Calculation Logic
@@ -1300,6 +1630,144 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
     return { x, y };
   };
 
+  // Live drag handler for radius and angle sliders directly on the sprinkler itself
+  useEffect(() => {
+    if (!isDraggingRadius && !isDraggingAngle && !isDraggingAngleStart) return;
+
+    const panX = pan.x;
+    const panY = pan.y;
+
+    const handleGlobalMove = (e: PointerEvent) => {
+      if (selectedSprinklerIdx === null) return;
+      
+      const coords = getMouseCoords(e.clientX, e.clientY);
+      if (!coords) return;
+
+      if (isDraggingRadius) {
+        setSprinklers(prev => {
+          const sp = prev[selectedSprinklerIdx];
+          if (!sp) return prev;
+          const dist = Math.hypot(coords.x - sp.x, coords.y - sp.y);
+          const meters = dist / PIXELS_PER_METER;
+          // Constrain physical spray bounds: min 1.1m (MP800SR) to max 11.0m (MP3500 max range or custom)
+          const clampedMeters = Math.max(1.1, Math.min(11.0, meters));
+          const nz = getNozzleData(clampedMeters * PIXELS_PER_METER, sp.angleDeg, sp.selectedModel || 'auto');
+          
+          const physicalAngle = nz.physicalAngle;
+          let isFullCircle = physicalAngle >= 359;
+          let angleEnd = isFullCircle ? Math.PI * 2 : (sp.angleStart + (physicalAngle * Math.PI / 180));
+          let largeArc = physicalAngle > 180 ? 1 : 0;
+
+          const updated = [...prev];
+          updated[selectedSprinklerIdx] = {
+            ...sp,
+            r: nz.radiusPx,
+            angleDeg: physicalAngle,
+            angleEnd: angleEnd,
+            largeArc: largeArc,
+            label: nz.name,
+            flowLpm: nz.flowLpm,
+            selectedModel: sp.selectedModel || 'auto',
+            zoneColor: nz.colorHex
+          };
+          return updated;
+        });
+      } else if (isDraggingAngle) {
+        setSprinklers(prev => {
+          const sp = prev[selectedSprinklerIdx];
+          if (!sp) return prev;
+          let pointerAngle = Math.atan2(coords.y - sp.y, coords.x - sp.x);
+          let diffRad = pointerAngle - sp.angleStart;
+          while (diffRad < 0) diffRad += Math.PI * 2;
+          let newAngleDeg = Math.round(diffRad * 180 / Math.PI);
+          if (newAngleDeg > 355) newAngleDeg = 360;
+          
+          // Determine the min allowed angle for the current radius and nozzle selection
+          const testNz = getNozzleData(sp.r, 45, sp.selectedModel || 'auto');
+          const minAngleAllowed = (testNz.model === 'MP Corner' || testNz.model === 'MP-Corner') ? 45 : 90;
+          
+          newAngleDeg = Math.max(minAngleAllowed, Math.min(360, newAngleDeg));
+          
+          const nz = getNozzleData(sp.r, newAngleDeg, sp.selectedModel || 'auto');
+          const physicalAngle = nz.physicalAngle;
+          
+          let isFullCircle = physicalAngle >= 359;
+          let angleEnd = isFullCircle ? Math.PI * 2 : (sp.angleStart + (physicalAngle * Math.PI / 180));
+          let largeArc = physicalAngle > 180 ? 1 : 0;
+          
+          const updated = [...prev];
+          updated[selectedSprinklerIdx] = {
+            ...sp,
+            angleDeg: physicalAngle,
+            angleEnd: angleEnd,
+            largeArc: largeArc,
+            label: nz.name,
+            flowLpm: nz.flowLpm,
+            r: nz.radiusPx,
+            selectedModel: sp.selectedModel || 'auto',
+            zoneColor: nz.colorHex
+          };
+          return updated;
+        });
+      } else if (isDraggingAngleStart) {
+        setSprinklers(prev => {
+          const sp = prev[selectedSprinklerIdx];
+          if (!sp) return prev;
+          let pointerAngle = Math.atan2(coords.y - sp.y, coords.x - sp.x);
+          let diffRad = sp.angleEnd - pointerAngle;
+          while (diffRad < 0) diffRad += Math.PI * 2;
+          let newAngleDeg = Math.round(diffRad * 180 / Math.PI);
+          if (newAngleDeg > 355) newAngleDeg = 360;
+          
+          // Determine the min allowed angle for the current radius and nozzle selection
+          const testNz = getNozzleData(sp.r, 45, sp.selectedModel || 'auto');
+          const minAngleAllowed = (testNz.model === 'MP Corner' || testNz.model === 'MP-Corner') ? 45 : 90;
+          
+          newAngleDeg = Math.max(minAngleAllowed, Math.min(360, newAngleDeg));
+          
+          const nz = getNozzleData(sp.r, newAngleDeg, sp.selectedModel || 'auto');
+          const physicalAngle = nz.physicalAngle;
+          
+          let isFullCircle = physicalAngle >= 359;
+          let newAngleStart = isFullCircle ? 0 : (sp.angleEnd - (physicalAngle * Math.PI / 180));
+          while (newAngleStart < 0) newAngleStart += Math.PI * 2;
+          while (newAngleStart >= Math.PI * 2) newAngleStart -= Math.PI * 2;
+          
+          let angleEnd = isFullCircle ? Math.PI * 2 : sp.angleEnd;
+          let largeArc = physicalAngle > 180 ? 1 : 0;
+          
+          const updated = [...prev];
+          updated[selectedSprinklerIdx] = {
+            ...sp,
+            angleStart: newAngleStart,
+            angleDeg: physicalAngle,
+            angleEnd: angleEnd,
+            largeArc: largeArc,
+            label: nz.name,
+            flowLpm: nz.flowLpm,
+            r: nz.radiusPx,
+            selectedModel: sp.selectedModel || 'auto',
+            zoneColor: nz.colorHex
+          };
+          return updated;
+        });
+      }
+    };
+
+    const handleGlobalUp = () => {
+      setIsDraggingRadius(false);
+      setIsDraggingAngle(false);
+      setIsDraggingAngleStart(false);
+    };
+
+    window.addEventListener('pointermove', handleGlobalMove, { passive: true });
+    window.addEventListener('pointerup', handleGlobalUp, { passive: true });
+    return () => {
+      window.removeEventListener('pointermove', handleGlobalMove);
+      window.removeEventListener('pointerup', handleGlobalUp);
+    };
+  }, [isDraggingRadius, isDraggingAngle, isDraggingAngleStart, selectedSprinklerIdx, scale, pan.x, pan.y]);
+
   // Mobile zooming/panning tracking
   const activePointers = useRef<Map<number, React.PointerEvent>>(new Map());
   const touchState = useRef({ isZooming: false, isPanning: false, moved: false, lastDist: 0, startPos: { x: 0, y: 0 }, startPan: { x: 0, y: 0 } });
@@ -1337,24 +1805,7 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
   };
 
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (isDraggingRadius && selectedSprinklerIdx !== null) {
-      const coords = getMouseCoords(e.clientX, e.clientY);
-      if (coords) {
-        const sp = sprinklers[selectedSprinklerIdx];
-        const dist = Math.hypot(coords.x - sp.x, coords.y - sp.y);
-        const meters = dist / PIXELS_PER_METER;
-        const clampedMeters = Math.max(1.1, Math.min(11.0, meters));
-        const nz = getNozzleData(clampedMeters * PIXELS_PER_METER, sp.angleDeg);
-        
-        const updated = [...sprinklers];
-        updated[selectedSprinklerIdx] = {
-          ...sp,
-          r: nz.radiusPx,
-          label: nz.name,
-          flowLpm: nz.flowLpm
-        };
-        setSprinklers(updated);
-      }
+    if ((isDraggingRadius || isDraggingAngle || isDraggingAngleStart) && selectedSprinklerIdx !== null) {
       return;
     }
 
@@ -1422,8 +1873,10 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
       touchState.current.isZooming = false;
       touchState.current.isPanning = false;
       
-      if (isDraggingRadius) {
+      if (isDraggingRadius || isDraggingAngle || isDraggingAngleStart) {
         setIsDraggingRadius(false);
+        setIsDraggingAngle(false);
+        setIsDraggingAngleStart(false);
         return;
       }
 
@@ -1501,7 +1954,7 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
           angleDeg: 90,
           label: nz.name,
           flowLpm: nz.flowLpm,
-          zoneColor: '#3b82f6',
+          zoneColor: nz.colorHex,
           isManual: true
         };
         const newSprinklersList = [...sprinklers, newSp];
@@ -1656,8 +2109,8 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
                 else if (step === 'planning_choice') setStep('draw');
                 else if (step === 'pipeline_drawing') setStep('planning_choice');
                 else if (step === 'irrigation_choice') setStep('pipeline_drawing');
-                else if (step === 'irrigation_manual') setStep('irrigation_choice');
-                else if (step === 'infrastructure') setStep('draw');
+                else if (step === 'irrigation_manual') setStep('planning_choice');
+                else if (step === 'infrastructure') setStep('planning_choice');
                 else if (step === 'calculation') setStep('draw');
                 else onBack();
               }} 
@@ -1735,7 +2188,18 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
               </div>
             )}
             {step === 'irrigation_manual' && (
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
+                {currentShape.length >= 2 && tool === 'draw_pipe' && (
+                  <button 
+                    onClick={() => {
+                      setManualPipes([...manualPipes, { id: 'pipe-' + Date.now(), points: currentShape, type: 'pe25' }]);
+                      setCurrentShape([]);
+                    }} 
+                    className="bg-sky-600 text-white font-semibold text-xs sm:text-sm px-2.5 py-1.5 rounded-md hover:bg-sky-700 transition-colors shadow-sm"
+                  >
+                    Leitung fertig ({currentShape.length})
+                  </button>
+                )}
                 {currentShape.length >= 2 && tool === 'draw_drip' && (
                   <button 
                     onClick={() => {
@@ -1744,19 +2208,27 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
                     }} 
                     className="bg-amber-600 text-white font-semibold text-xs sm:text-sm px-2.5 py-1.5 rounded-md hover:bg-amber-700 transition-colors shadow-sm font-sans"
                   >
-                    Schlauch fertigstellen ({currentShape.length} Punkte)
+                    Schlauch fertig ({currentShape.length})
                   </button>
                 )}
                 <button 
+                  onClick={triggerOptionalAutoPlan} 
+                  className="bg-indigo-600 text-white font-semibold text-xs sm:text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg hover:bg-indigo-700 transition-all shadow-sm flex items-center gap-1.5 cursor-pointer border border-indigo-500/20"
+                  title="Regner automatisch auf Rasenflächen platzieren"
+                >
+                  <span className="hidden xs:inline">🧙‍♂️ Auto-Sprinkler</span>
+                  <span className="xs:hidden">🧙‍♂️ Auto</span>
+                </button>
+                <button 
                   onClick={runManualCalculation} 
-                  className="bg-blue-600 text-white font-bold text-xs sm:text-sm px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors shadow-lg animate-pulse"
+                  className="bg-emerald-600 text-white font-extrabold text-xs sm:text-sm px-3.5 py-1.5 sm:px-5 sm:py-2 rounded-lg hover:bg-emerald-700 transition-colors shadow-md animate-pulse cursor-pointer"
                 >
                   Fertig & Berechnen
                 </button>
               </div>
             )}
             {step === 'infrastructure' && (
-              <button onClick={runCalculation} className="bg-blue-600 text-white font-semibold text-xs sm:text-sm px-2.5 py-1.5 sm:px-4 rounded-md hover:bg-blue-700 transition-colors shadow-sm">
+              <button onClick={runCalculation} className="bg-emerald-600 text-white font-bold text-xs sm:text-sm px-3 py-2 sm:px-4 rounded-xl hover:bg-emerald-700 transition-colors shadow-md cursor-pointer">
                 <span className="hidden sm:inline font-bold">Planung automatisch berechnen</span>
                 <span className="sm:hidden font-bold">Auto-Planen</span>
               </button>
@@ -1838,28 +2310,28 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
               <>
                 <button 
                   onClick={() => { setTool('draw_pipe'); setCurrentShape([]); }} 
-                  className={`p-2 rounded-xl transition-all ${tool === 'draw_pipe' ? 'bg-sky-500 text-white shadow-md animate-pulse' : 'hover:bg-slate-100 text-slate-600'}`} 
+                  className={`p-2 rounded-xl transition-all ${tool === 'draw_pipe' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
                   title="Hauptleitung verlegen (PE-Rohr 25mm)"
                 >
                   <PenTool className="w-5 h-5 text-sky-600" style={{ stroke: tool === 'draw_pipe' ? '#fff' : undefined }} />
                 </button>
                 <button 
                   onClick={() => setTool('water_source')} 
-                  className={`p-2 rounded-xl transition-all ${tool === 'water_source' ? 'bg-blue-500 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
+                  className={`p-2 rounded-xl transition-all ${tool === 'water_source' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
                   title="Wasseranschluss platzieren"
                 >
                   <Droplet className="w-5 h-5" />
                 </button>
                 <button 
                   onClick={() => setTool('valve_box')} 
-                  className={`p-2 rounded-xl transition-all ${tool === 'valve_box' ? 'bg-amber-500 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
+                  className={`p-2 rounded-xl transition-all ${tool === 'valve_box' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
                   title="Verteilerbox platzieren"
                 >
                   <Box className="w-5 h-5" />
                 </button>
                 <button 
                   onClick={() => setTool('controller')} 
-                  className={`p-2 rounded-xl transition-all ${tool === 'controller' ? 'bg-purple-500 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
+                  className={`p-2 rounded-xl transition-all ${tool === 'controller' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
                   title="Steuerungs-Computer platzieren"
                 >
                   <Cpu className="w-5 h-5" />
@@ -1872,14 +2344,21 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
               <>
                 <button 
                   onClick={() => setTool('add_sprinkler')} 
-                  className={`p-2 rounded-xl transition-all ${tool === 'add_sprinkler' ? 'bg-blue-500 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
+                  className={`p-2 rounded-xl transition-all ${tool === 'add_sprinkler' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
                   title="Regner platzieren (MP Rotator)"
                 >
-                  <CircleDot className="w-5 h-5" />
+                  <CircleDot className="w-5 h-5 text-emerald-600" style={{ stroke: tool === 'add_sprinkler' ? '#fff' : undefined }} />
+                </button>
+                <button 
+                  onClick={() => { setTool('draw_pipe'); setCurrentShape([]); }} 
+                  className={`p-2 rounded-xl transition-all ${tool === 'draw_pipe' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
+                  title="PE-Rohr verlegen (Zonenleitung)"
+                >
+                  <PenTool className="w-5 h-5 text-sky-600" style={{ stroke: tool === 'draw_pipe' ? '#fff' : undefined }} />
                 </button>
                 <button 
                   onClick={() => { setTool('draw_drip'); setCurrentShape([]); }} 
-                  className={`p-2 rounded-xl transition-all ${tool === 'draw_drip' ? 'bg-amber-500 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
+                  className={`p-2 rounded-xl transition-all ${tool === 'draw_drip' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
                   title="Tropfschlauch / Heckenbewässerung verlegen (Tropfrohr)"
                 >
                   <PenTool className="w-5 h-5 text-amber-600" style={{ stroke: tool === 'draw_drip' ? '#fff' : undefined }} />
@@ -1889,7 +2368,29 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
                   className={`p-2 rounded-xl transition-all ${tool === 'add_rzws' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
                   title="RZWS Baum-Bewässerung setzen"
                 >
-                  <Trees className="w-5 h-5" />
+                  <Trees className="w-5 h-5 text-green-700" style={{ stroke: tool === 'add_rzws' ? '#fff' : undefined }} />
+                </button>
+                <div className="w-full h-px bg-slate-200 my-1"></div>
+                <button 
+                  onClick={() => setTool('water_source')} 
+                  className={`p-2 rounded-xl transition-all ${tool === 'water_source' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
+                  title="Wasseranschluss platzieren"
+                >
+                  <Droplet className="w-5 h-5 text-indigo-500" style={{ stroke: tool === 'water_source' ? '#fff' : undefined }} />
+                </button>
+                <button 
+                  onClick={() => setTool('valve_box')} 
+                  className={`p-2 rounded-xl transition-all ${tool === 'valve_box' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
+                  title="Verteilerbox platzieren (Pflicht)"
+                >
+                  <Box className="w-5 h-5 text-teal-600" style={{ stroke: tool === 'valve_box' ? '#fff' : undefined }} />
+                </button>
+                <button 
+                  onClick={() => setTool('controller')} 
+                  className={`p-2 rounded-xl transition-all ${tool === 'controller' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
+                  title="Steuerungs-Computer platzieren (Pflicht)"
+                >
+                  <Cpu className="w-5 h-5 text-fuchsia-600" style={{ stroke: tool === 'controller' ? '#fff' : undefined }} />
                 </button>
                 <div className="w-full h-px bg-slate-200 my-1"></div>
               </>
@@ -1899,21 +2400,21 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
               <>
                 <button 
                   onClick={() => setTool('water_source')} 
-                  className={`p-2 rounded-xl transition-all ${tool === 'water_source' ? 'bg-blue-500 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
+                  className={`p-2 rounded-xl transition-all ${tool === 'water_source' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
                   title="Wasserquelle"
                 >
                   <Droplet className="w-5 h-5" />
                 </button>
                 <button 
                   onClick={() => setTool('controller')} 
-                  className={`p-2 rounded-xl transition-all ${tool === 'controller' ? 'bg-purple-500 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
+                  className={`p-2 rounded-xl transition-all ${tool === 'controller' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
                   title="Steuergerät"
                 >
                   <Cpu className="w-5 h-5" />
                 </button>
                 <button 
                   onClick={() => setTool('valve_box')} 
-                  className={`p-2 rounded-xl transition-all ${tool === 'valve_box' ? 'bg-amber-500 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
+                  className={`p-2 rounded-xl transition-all ${tool === 'valve_box' ? 'bg-emerald-600 text-white shadow-md' : 'hover:bg-slate-100 text-slate-600'}`} 
                   title="Verteilerbox"
                 >
                   <Box className="w-5 h-5" />
@@ -1993,88 +2494,229 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
         </div>
 
         {/* Result Area Info */}
-        {step === 'calculation' && (
+        {(step === 'calculation' && showStats && selectedSprinklerIdx === null) && (
           <div className="absolute top-24 right-4 sm:right-6 z-20 flex flex-col items-end gap-3 pointer-events-none">
-            {(showStats || selectedSprinklerIdx !== null) ? (
+            {showStats ? (
               <motion.div initial={{opacity: 0, x: 20}} animate={{opacity: 1, x: 0}} className="bg-white/90 backdrop-blur-md border border-gray-200 rounded-xl shadow-xl w-[calc(100vw-2rem)] sm:w-[320px] max-h-[calc(100vh-10rem)] overflow-y-auto pointer-events-auto flex flex-col">
-                 <div className="bg-blue-600 p-4 text-white flex justify-between items-center">
+                 <div className="bg-slate-50 border-b border-slate-200/80 p-4 text-slate-800 flex justify-between items-center">
                     <div>
-                      <h3 className="font-bold text-lg">{selectedSprinklerIdx !== null ? 'Düsen-Info' : 'System-Analyse'}</h3>
-                      <p className="text-blue-100 text-xs">Basierend auf Hunter MP Rotator</p>
+                      <h3 className="font-extrabold text-sm text-slate-900 tracking-tight">System-Analyse</h3>
+                      <p className="text-slate-500 text-[11px] font-semibold">Basierend auf Hunter MP Rotator</p>
                     </div>
-                    {selectedSprinklerIdx !== null ? (
-                        <button onClick={() => setSelectedSprinklerIdx(null)} className="text-white hover:bg-blue-700 p-1.5 rounded-full transition-colors">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                    ) : (
-                        <button onClick={() => setShowStats(false)} className="text-white hover:bg-blue-700 p-1.5 rounded-full transition-colors">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                    )}
+                    <button onClick={() => setShowStats(false)} className="text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 p-1.5 rounded-full transition-colors cursor-pointer">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </button>
                  </div>
                  
                  {selectedSprinklerIdx !== null && sprinklers[selectedSprinklerIdx] ? (
-                    <div className="p-4 space-y-4 text-sm">
+                    <div className="p-4 space-y-4 text-sm font-sans">
+                       
+                       {/* Display model and description */}
                        <div className="flex flex-col pb-3 border-b border-gray-100 gap-1 font-sans">
-                          <span className="text-xs text-slate-400 uppercase font-black tracking-wider">Modell</span>
-                          <span className="font-bold text-gray-950 text-base">{sprinklers[selectedSprinklerIdx].label}</span>
+                           <span className="text-xs text-slate-400 uppercase font-black tracking-wider">Aktives Modell</span>
+                           <span className="font-bold text-gray-950 text-base">{sprinklers[selectedSprinklerIdx].label}</span>
                        </div>
-                       <div className="space-y-2 pb-3 border-b border-gray-100 font-sans">
-                          <span className="text-xs text-slate-500 font-semibold tracking-wide block">Wurfweite (Radius) einstellen</span>
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="range"
-                              min="1.1"
-                              max="11.0"
-                              step="0.1"
-                              value={parseFloat((sprinklers[selectedSprinklerIdx].r / PIXELS_PER_METER).toFixed(1))}
-                              onChange={(e) => handleUpdateSprinklerRadius(parseFloat(e.target.value))}
-                              className="flex-1 accent-blue-600 h-1.5 bg-gray-200 rounded-lg cursor-pointer"
-                            />
-                            <span className="font-mono text-xs w-10 text-right font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded shrink-0">
-                              {(sprinklers[selectedSprinklerIdx].r / PIXELS_PER_METER).toFixed(1)}m
-                            </span>
-                          </div>
+
+                       {/* Nozzle Select dropdown */}
+                       <div className="space-y-1.5 pb-3 border-b border-gray-100 font-sans">
+                           <span className="text-xs text-slate-500 font-extrabold tracking-wide block">Düse manuell auswählen</span>
+                           <select
+                             value={sprinklers[selectedSprinklerIdx].selectedModel || 'auto'}
+                             onChange={(e) => handleUpdateSprinklerModel(e.target.value)}
+                             className="w-full bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-gray-800 shadow-sm focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 font-sans cursor-pointer focus:outline-none"
+                           >
+                             <option value="auto">Automatische Bestimmung (Wurfweite)</option>
+                             <option value="MP800SR">MP800SR (Kurzstrecke: 1.1m - 3.5m)</option>
+                             <option value="MP1000">MP1000 (Mittelstrecke: 2.5m - 4.6m)</option>
+                             <option value="MP815">MP815 (Schnellberegnung: 2.5m - 4.9m)</option>
+                             <option value="MP2000">MP2000 (Mittelstrecke groß: 4.0m - 6.4m)</option>
+                             <option value="MP3000">MP3000 (Großfläche: 6.7m - 9.1m)</option>
+                             <option value="MP3500">MP3500 (Großfläche maximal: 9.4m - 10.7m)</option>
+                           </select>
+                              {(() => {
+                              const sp = sprinklers[selectedSprinklerIdx];
+                              const nz = getNozzleData(sp.r, sp.angleDeg, sp.selectedModel);
+                              const minR = nz.minR;
+                              const maxR = nz.maxR;
+                              let desc = "Optimaler Hunter MP Rotator Regner";
+                              if (nz.model === 'MP800SR') desc = "Kurzstrecken-Düse (1,8m - 3,5m) mit hoher Niederschlagsrate für kleine Gärten.";
+                              else if (nz.model === 'MP1000') desc = "Standard-Düse (2,5m - 4,5m) für mittelgroße Rasenflächen.";
+                              else if (nz.model === 'MP815') desc = "Schnellberegnungs-Düse (2,5m - 4,9m) mit hoher Niederschlagsrate.";
+                              else if (nz.model === 'MP2000') desc = "Stabile Mittelstrecken-Düse (4,0m - 6,4m) für optimalen Windschutz.";
+                              else if (nz.model === 'MP3000') desc = "Großflächen-Düse (6,7m - 9,1m) für weite Rasenflächen.";
+                              else if (nz.model === 'MP3500') desc = "Maximal-Düse (9,4m - 10,7m) für extrem weite Reichweiten.";
+                              else if (nz.model === 'MP Corner') desc = "Spezialdüse (2,5m - 4,5m) für exakte 90°-Eckenbewässerung.";
+
+                              const currentR = parseFloat((sp.r / PIXELS_PER_METER).toFixed(1));
+                              const isAtLimit = currentR <= minR || currentR >= maxR;
+                              
+                              return (
+                                <div className="mt-2 bg-slate-50 rounded-lg p-2.5 border border-slate-150 text-[11px] space-y-1">
+                                  <div className="flex justify-between items-center text-slate-600 font-sans">
+                                    <span>Grenzbereich der Wurfweite:</span>
+                                    <span className="font-mono font-bold text-slate-900">{minR.toFixed(1)}m – {maxR.toFixed(1)}m</span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-slate-600 font-sans">
+                                    <span>Düsenfarbe (Kappe):</span>
+                                    <span className="flex items-center gap-1.5 font-bold text-slate-800">
+                                      <span 
+                                        className="w-2.5 h-2.5 rounded-full inline-block border border-black/10 animate-pulse shadow-xs shrink-0" 
+                                        style={{ backgroundColor: nz.colorHex }}
+                                      />
+                                      {nz.colorName}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center text-slate-600 font-sans">
+                                    <span>Wasserverbrauch:</span>
+                                    <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100/50">~{(sp.flowLpm || 0).toFixed(1)} l/min</span>
+                                  </div>
+                                  {desc && <p className="text-[10px] text-slate-400 font-normal italic font-sans leading-tight pt-0.5">{desc}</p>}
+                                  {isAtLimit && (
+                                    <div className="text-[10px] text-amber-600 flex items-center gap-1 font-bold pt-1 border-t border-slate-100">
+                                      <span>⚠️ Leistungsgrenze erreicht ({currentR.toFixed(1)}m)</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                           })()}
                        </div>
+
+                       {/* Wurfweite adjustment with slider and +/- buttons */}
                        <div className="space-y-2 pb-3 border-b border-gray-100 font-sans">
-                          <span className="text-xs text-slate-500 font-semibold tracking-wide block">Winkel (Sektor) einstellen</span>
-                          <div className="flex gap-1.5">
-                            {[90, 180, 270, 360].map(deg => (
-                              <button
-                                key={deg}
-                                type="button"
-                                onClick={() => handleUpdateSprinklerAngle(deg)}
-                                className={`flex-1 py-1 rounded text-[11px] font-bold transition-all border ${
-                                  Math.round(sprinklers[selectedSprinklerIdx].angleDeg) === deg
-                                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                                    : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-200 shadow-xs'
-                                }`}
-                              >
-                                {deg}°
-                              </button>
-                            ))}
-                          </div>
-                          <div className="flex items-center gap-3 pt-1">
-                            <input
-                              type="range"
-                              min="45"
-                              max="360"
-                              step="5"
-                              value={Math.round(sprinklers[selectedSprinklerIdx].angleDeg)}
-                              onChange={(e) => handleUpdateSprinklerAngle(parseInt(e.target.value))}
-                              className="flex-1 accent-blue-600 h-1.5 bg-gray-200 rounded-lg cursor-pointer"
-                            />
-                            <span className="font-mono text-xs w-10 text-right font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded shrink-0">
-                              {Math.round(sprinklers[selectedSprinklerIdx].angleDeg)}°
-                            </span>
-                          </div>
+                           <div className="flex justify-between items-center font-sans">
+                              <span className="text-xs text-slate-500 font-bold tracking-wide">Wurfweite (Radius)</span>
+                              <span className="font-mono text-xs font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded shadow-xs">
+                                {(sprinklers[selectedSprinklerIdx].r / PIXELS_PER_METER).toFixed(1)}m
+                              </span>
+                           </div>
+                           <div className="flex items-center gap-2">
+                             <button
+                               type="button"
+                               onClick={() => {
+                                 const currentR = sprinklers[selectedSprinklerIdx].r / PIXELS_PER_METER;
+                                 const nextVal = Math.max(1.1, parseFloat((currentR - 0.1).toFixed(1)));
+                                 handleUpdateSprinklerRadius(nextVal);
+                               }}
+                               className="w-8 h-8 select-none bg-slate-50 border border-slate-200 hover:bg-slate-150 active:bg-slate-200 text-slate-800 rounded-lg flex items-center justify-center font-black text-base transition-colors shrink-0 cursor-pointer"
+                             >
+                               -
+                             </button>
+                             <input
+                               type="range"
+                               min="1.1"
+                               max="10.7"
+                               step="0.1"
+                               value={parseFloat((sprinklers[selectedSprinklerIdx].r / PIXELS_PER_METER).toFixed(1))}
+                               onChange={(e) => handleUpdateSprinklerRadius(parseFloat(e.target.value))}
+                               className="flex-1 accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"
+                             />
+                             <button
+                               type="button"
+                               onClick={() => {
+                                 const currentR = sprinklers[selectedSprinklerIdx].r / PIXELS_PER_METER;
+                                 const nextVal = Math.min(10.7, parseFloat((currentR + 0.1).toFixed(1)));
+                                 handleUpdateSprinklerRadius(nextVal);
+                               }}
+                               className="w-8 h-8 select-none bg-slate-50 border border-slate-200 hover:bg-slate-150 active:bg-slate-200 text-slate-800 rounded-lg flex items-center justify-center font-black text-base transition-colors shrink-0 cursor-pointer"
+                             >
+                               +
+                             </button>
+                           </div>
+                       </div>
+
+                       {/* Winkel/Sektor adjustment with presets and +/- buttons */}
+                       <div className="space-y-2 pb-3 border-b border-gray-100 font-sans">
+                           <div className="flex justify-between items-center font-sans">
+                              <span className="text-xs text-slate-500 font-bold tracking-wide">Beregnungswinkel</span>
+                              <span className="font-mono text-xs font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded shadow-xs">
+                                {Math.round(sprinklers[selectedSprinklerIdx].angleDeg)}°
+                              </span>
+                           </div>
+                           <div className="flex gap-1">
+                             {[90, 180, 270, 360].map(deg => (
+                               <button
+                                 key={deg}
+                                 type="button"
+                                 onClick={() => handleUpdateSprinklerAngle(deg)}
+                                 className={`flex-1 py-1 rounded text-[11px] font-extrabold transition-all border cursor-pointer ${
+                                   Math.round(sprinklers[selectedSprinklerIdx].angleDeg) === deg
+                                     ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                     : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200 shadow-xs'
+                                 }`}
+                               >
+                                 {deg}°
+                               </button>
+                             ))}
+                           </div>
+                           <div className="flex items-center gap-2 pt-1 font-sans">
+                              {(() => {
+                                const sp = sprinklers[selectedSprinklerIdx];
+                                const testNz = getNozzleData(sp.r, 45, sp.selectedModel);
+                                const minAngleAllowed = (testNz.model === 'MP Corner' || testNz.model === 'MP-Corner') ? 45 : 90;
+                                return (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const currentA = sp.angleDeg;
+                                        const nextVal = Math.max(minAngleAllowed, Math.round(currentA - 5));
+                                        handleUpdateSprinklerAngle(nextVal);
+                                      }}
+                                      className="w-8 h-8 select-none bg-slate-50 border border-slate-200 hover:bg-slate-150 active:bg-slate-200 text-slate-800 rounded-lg flex items-center justify-center font-black text-base transition-colors shrink-0 cursor-pointer"
+                                    >
+                                      -
+                                    </button>
+                                    <input
+                                      type="range"
+                                      min={minAngleAllowed}
+                                      max="360"
+                                      step="5"
+                                      value={Math.round(sp.angleDeg)}
+                                      onChange={(e) => handleUpdateSprinklerAngle(parseInt(e.target.value))}
+                                      className="flex-1 accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const currentA = sp.angleDeg;
+                                        const nextVal = Math.min(360, Math.round(currentA + 5));
+                                        handleUpdateSprinklerAngle(nextVal);
+                                      }}
+                                      className="w-8 h-8 select-none bg-slate-50 border border-slate-200 hover:bg-slate-150 active:bg-slate-200 text-slate-800 rounded-lg flex items-center justify-center font-black text-base transition-colors shrink-0 cursor-pointer"
+                                    >
+                                      +
+                                    </button>
+                                  </>
+                                );
+                              })()}
+                            </div>
+                       </div>
+
+                       {/* Interactive clean quick buttons */}
+                       <div className="pt-2 flex flex-col gap-2 font-sans">
+                           <button 
+                             type="button"
+                             onClick={() => {
+                               const updated = sprinklers.filter((_, idx) => idx !== selectedSprinklerIdx);
+                               setSprinklers(updated);
+                               setSelectedSprinklerIdx(null);
+                             }} 
+                             className="w-full bg-red-50 hover:bg-red-100 border border-red-200 text-red-600 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                           >
+                             <Trash2 className="w-3.5 h-3.5" /> Düse löschen
+                           </button>
+                           <button 
+                             type="button"
+                             onClick={() => setSelectedSprinklerIdx(null)} 
+                             className="w-full bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 py-2 rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                           >
+                             Schließen
+                           </button>
                        </div>
                     </div>
-                                   ) : (
+                  ) : (
                   <div className="p-4 space-y-4 text-sm max-h-[calc(100vh-14rem)] overflow-y-auto">
                     {/* Collapsible Section 1: Parameters */}
                     <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm font-sans">
@@ -2218,7 +2860,7 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
                                 <div className="p-2 bg-slate-50 border border-slate-100 rounded-lg">
                                   <div className="flex justify-between items-center mb-1">
                                     <span className="font-semibold text-xs text-gray-800 font-sans">Hauptleitung (Quelle → Box)</span>
-                                    <span className="px-1.5 py-0.5 bg-blue-600 text-white font-bold text-[10px] rounded uppercase font-sans">
+                                    <span className="px-2 py-0.5 bg-emerald-50 border border-emerald-100/50 text-emerald-800 font-extrabold text-[10px] rounded uppercase font-sans">
                                       {analysis.mainPipe.size} mm PE
                                     </span>
                                   </div>
@@ -2285,12 +2927,12 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
                           ) : null}
 
                           {/* Best Practice Info Box */}
-                          <div className="bg-blue-50/75 border border-blue-100 rounded-lg p-2.5 text-[11px] text-blue-800 space-y-1 font-sans">
-                            <span className="font-bold uppercase text-[9px] tracking-wide text-blue-600 font-sans">Profi Best Practices</span>
-                            <div className="space-y-1 font-sans">
-                              <div>• Hauptleitung (Quelle → Box): <span className="font-bold">32 mm</span> bevorzugen.</div>
-                              <div>• Kreiszuleitungen (Box → Regner): <span className="font-bold">25 mm</span> PE-Rohr.</div>
-                              <div>• Regneranschluss: <span className="font-bold">16 mm weiches Flexrohr</span> (Swing Joint).</div>
+                          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 text-[11px] text-slate-700 space-y-1.5 font-sans">
+                            <span className="font-bold uppercase text-[9px] tracking-wide text-emerald-600 font-sans">Profi Best Practices</span>
+                            <div className="space-y-1 font-sans text-xs text-slate-600">
+                              <div>• Hauptleitung (Quelle → Box): <span className="font-bold text-slate-800">32 mm</span> bevorzugen.</div>
+                              <div>• Kreiszuleitungen (Box → Regner): <span className="font-bold text-slate-800">25 mm</span> PE-Rohr.</div>
+                              <div>• Regneranschluss: <span className="font-bold text-slate-800">16 mm weiches Flexrohr</span> (Swing Joint).</div>
                             </div>
                           </div>
                         </div>
@@ -2312,7 +2954,7 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
                   )}
               </motion.div>
             ) : (
-              <button onClick={() => setShowStats(true)} className="pointer-events-auto bg-blue-600 text-white p-3 rounded-full shadow-lg hover:bg-blue-700 transition">
+              <button onClick={() => setShowStats(true)} className="pointer-events-auto bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 p-3.5 rounded-full shadow-lg transition duration-200 cursor-pointer">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
@@ -2489,6 +3131,7 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
                        key={s.id} 
                        d={pathData} 
                        className={`${fillClass} ${strokeClass} hover:opacity-70 transition-opacity cursor-pointer`}
+                       style={{ pointerEvents: tool === 'select' ? 'auto' : 'none' }}
                        strokeWidth={2 / scale}
                        onPointerDown={(e) => { e.stopPropagation(); setSelectedShapeId(s.id); setTool('select'); }}
                        onClick={(e) => { e.stopPropagation(); setSelectedShapeId(s.id); setTool('select'); }}
@@ -2502,6 +3145,7 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
                       key={s.id} 
                       cx={center.x} cy={center.y} r={r} 
                       className={`${fillClass} ${strokeClass} hover:opacity-70 transition-opacity cursor-pointer`}
+                      style={{ pointerEvents: tool === 'select' ? 'auto' : 'none' }}
                       strokeWidth={2 / scale}
                       onPointerDown={(e) => { e.stopPropagation(); setSelectedShapeId(s.id); setTool('select'); }}
                       onClick={(e) => { e.stopPropagation(); setSelectedShapeId(s.id); setTool('select'); }}
@@ -2554,6 +3198,11 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
               {sprinklers.map((sp, i) => {
                 const isFullCircle = sp.angleDeg >= 359;
                 const isSelected = selectedSprinklerIdx === i;
+                
+                const startDeg = Math.round(((sp.angleStart * 180 / Math.PI) % 360 + 360) % 360);
+                const endDeg = Math.round(((sp.angleEnd * 180 / Math.PI) % 360 + 360) % 360);
+                const angleLabel = sp.angleDeg >= 359 ? "▶ 360°" : `▶ ${startDeg}° – ${endDeg}°`;
+
                 return (
                  <g 
                     key={`sprinkler-${i}`} 
@@ -2565,25 +3214,128 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
                   <g clipPath={sp.shapeId ? `url(#clip-${sp.shapeId})` : undefined}>
                     <g transform={`translate(${sp.x}, ${sp.y})`}>
                       {isFullCircle ? (
-                        <circle cx="0" cy="0" r={sp.r} className={`${isSelected ? 'fill-blue-500 opacity-60' : 'fill-blue-400 opacity-40'} stroke-blue-600 pointer-events-none transition-all`} strokeWidth={2/scale} />
+                        <circle cx="0" cy="0" r={sp.r} className={`${isSelected ? 'fill-sky-400/25 stroke-sky-500' : 'fill-blue-400/20 stroke-blue-500'} pointer-events-none transition-all`} strokeWidth={1.5/scale} />
                       ) : (
                         <path 
                           d={`M 0 0 L ${sp.r * Math.cos(sp.angleStart)} ${sp.r * Math.sin(sp.angleStart)} A ${sp.r} ${sp.r} 0 ${sp.largeArc} ${sp.sweepFlag} ${sp.r * Math.cos(sp.angleEnd)} ${sp.r * Math.sin(sp.angleEnd)} Z`}
-                          className={`${isSelected ? 'fill-blue-500 opacity-60' : 'fill-blue-400 opacity-40'} stroke-blue-600 pointer-events-none transition-all`}
-                          strokeWidth={2/scale}
+                          className={`${isSelected ? 'fill-sky-400/25 stroke-sky-500' : 'fill-blue-400/20 stroke-blue-500'} pointer-events-none transition-all`}
+                          strokeWidth={1.5/scale}
                         />
                       )}
                     </g>
                   </g>
                   {/* Outer dot and text remain visible */}
                   <g transform={`translate(${sp.x}, ${sp.y})`}>
-                    <circle cx="0" cy="0" r={20/scale} className="fill-transparent cursor-pointer" />
-                    <circle cx="0" cy="0" r={isSelected ? 8/scale : 6/scale} style={{ fill: isSelected ? '#3b82f6' : (sp.zoneColor || '#1d4ed8') }} className="stroke-white transition-all z-10 cursor-pointer" strokeWidth={2 / scale} />
+                    <circle cx="0" cy="0" r={24/scale} className="fill-transparent cursor-pointer" />
                     
-                    {/* Tooltip text for Angle/Nozzle */}
-                    <text x={0} y={-10 / Math.min(scale, 2)} fontSize={10 / Math.min(scale, 2)} textAnchor="middle" stroke="white" strokeWidth={3/Math.min(scale, 2)} paintOrder="stroke" style={{ fill: sp.zoneColor || '#1e3a8a' }} className="font-bold pointer-events-none drop-shadow-md">
-                       {sp.label}
-                    </text>
+                    {/* Center dot - Orange when selected, zone-colored when not selected */}
+                    {isSelected ? (
+                      <circle 
+                        cx="0" cy="0" r={8/scale} 
+                        fill="#ff6b3d" 
+                        stroke="#c2410c" 
+                        strokeWidth={2/scale}
+                        className="transition-all hover:scale-110 drop-shadow-md cursor-pointer" 
+                      />
+                    ) : (
+                      <circle 
+                        cx="0" cy="0" r={6/scale} 
+                        fill={sp.zoneColor || '#1d4ed8'} 
+                        stroke="white" 
+                        strokeWidth={1.5/scale}
+                        className="transition-all cursor-pointer" 
+                      />
+                    )}
+
+                    {/* Floating local Delete (trash/cross) Button above/left of the orange dot if selected */}
+                    {isSelected && (
+                      <g 
+                        transform={`translate(${-18/scale}, ${-18/scale})`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          const updated = sprinklers.filter((_, idx) => idx !== i);
+                          setSprinklers(updated);
+                          setSelectedSprinklerIdx(null);
+                        }}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                        }}
+                        className="cursor-pointer"
+                      >
+                        <circle cx="0" cy="0" r={10/scale} fill="#ef4444" stroke="#ffffff" strokeWidth={1.5/scale} className="hover:fill-red-600 transition-colors shadow-sm" />
+                        <path d={`M ${-4.5/scale} ${-4.5/scale} L ${4.5/scale} ${4.5/scale} M ${4.5/scale} ${-4.5/scale} L ${-4.5/scale} ${4.5/scale}`} stroke="#ffffff" strokeWidth={1.8/scale} strokeLinecap="round" />
+                      </g>
+                    )}
+
+                    {/* Start sector white knob marker (as reference) if selected */}
+                    {isSelected && !isFullCircle && (
+                      <circle
+                        cx={sp.r * Math.cos(sp.angleStart)}
+                        cy={sp.r * Math.sin(sp.angleStart)}
+                        r={7 / scale}
+                        fill="#ffffff"
+                        stroke="#334155"
+                        strokeWidth={2 / scale}
+                        className="pointer-events-none drop-shadow-md"
+                      />
+                    )}
+                    
+                    {/* Live Multi-Line High Precision Nozzle Data Label Card underneath */}
+                    <g transform={`translate(0, ${18 / scale})`}>
+                      {/* Name of Nozzle model (Hunter MP line) */}
+                      <text 
+                        x={0} y={0} 
+                        fontSize={9.5 / scale} 
+                        textAnchor="middle" 
+                        stroke="#ffffff" 
+                        strokeWidth={3/scale} 
+                        paintOrder="stroke" 
+                        className={`font-sans font-black pointer-events-none ${isSelected ? 'fill-slate-900 text-[10.5px]' : 'fill-slate-700'}`}
+                      >
+                        {getRealisticNozzleLabel(sp)}
+                      </text>
+                      
+                      {/* Flow rate */}
+                      <text 
+                        x={0} y={11.5 / scale} 
+                        fontSize={8.5 / scale} 
+                        textAnchor="middle" 
+                        stroke="#ffffff" 
+                        strokeWidth={2.5/scale} 
+                        paintOrder="stroke" 
+                        className={`font-sans font-bold pointer-events-none ${isSelected ? 'fill-emerald-700' : 'fill-slate-500'}`}
+                      >
+                        💧 {(sp.flowLpm * 0.06).toFixed(2).replace('.', ',')} m³/h
+                      </text>
+                      
+                      {/* Angles start-end list or degrees */}
+                      <text 
+                        x={0} y={22 / scale} 
+                        fontSize={8.5 / scale} 
+                        textAnchor="middle" 
+                        stroke="#ffffff" 
+                        strokeWidth={2.5/scale} 
+                        paintOrder="stroke" 
+                        className={`font-sans font-semibold pointer-events-none ${isSelected ? 'fill-slate-800' : 'fill-slate-400'}`}
+                      >
+                        {angleLabel}
+                      </text>
+                      
+                      {/* Throw radius distance in meters */}
+                      <text 
+                        x={0} y={32.5 / scale} 
+                        fontSize={8.5 / scale} 
+                        textAnchor="middle" 
+                        stroke="#ffffff" 
+                        strokeWidth={2.5/scale} 
+                        paintOrder="stroke" 
+                        className={`font-sans font-black pointer-events-none ${isSelected ? 'fill-slate-950 font-black' : 'fill-slate-600'}`}
+                      >
+                        {(sp.r / PIXELS_PER_METER).toFixed(1).replace('.', ',')} m
+                      </text>
+                    </g>
                   </g>
                  </g>
                 );
@@ -2598,26 +3350,175 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
                   const handleX = sp.x + sp.r * Math.cos(handleAngle);
                   const handleY = sp.y + sp.r * Math.sin(handleAngle);
                   return (
-                    <g>
+                    <g key={`selected-guides-${selectedSprinklerIdx}`}>
+                      {/* Interactive visual guide circle showing complete 360° possible coverage (Wurfkreis) */}
+                      <circle 
+                        cx={sp.x} cy={sp.y} r={sp.r} 
+                        fill="none" 
+                        stroke="#0ea5e9" 
+                        strokeWidth={1.5 / scale} 
+                        strokeDasharray={`${5/scale},${5/scale}`} 
+                        opacity={0.35} 
+                        className="pointer-events-none"
+                      />
+                      
+                      {/* Connection Line of current radius */}
                       <line 
                         x1={sp.x} y1={sp.y} x2={handleX} y2={handleY} 
-                        stroke="#3b82f6" strokeWidth={1.5 / scale} strokeDasharray={`${3/scale},${3/scale}`} 
+                        stroke="#0ea5e9" strokeWidth={2 / scale} strokeDasharray={`${3/scale},${3/scale}`} 
                       />
+                      
+                      {/* Ripple visual indicator behind radius knob */}
                       <circle 
-                        cx={handleX} cy={handleY} r={14 / scale} 
-                        className="fill-blue-500/20 animate-ping pointer-events-none" 
+                        cx={handleX} cy={handleY} r={16 / scale} 
+                        className="fill-sky-500/10 animate-ping pointer-events-none" 
                       />
+                      
+                      {/* Actual visual knob (Radius) */}
                       <circle 
                         cx={handleX} cy={handleY} r={8 / scale} 
-                        className="fill-blue-600 stroke-white cursor-ew-resize hover:fill-blue-700 hover:scale-125 transition-transform shadow-lg" 
-                        strokeWidth={2 / scale}
+                        className="fill-sky-600 stroke-white cursor-ew-resize hover:fill-sky-700 hover:scale-125 transition-transform shadow-lg" 
+                        strokeWidth={2.5 / scale}
+                      />
+                      
+                      {/* Large invisible padding hit segment for finger or point-dragging */}
+                      <circle 
+                        cx={handleX} cy={handleY} r={Math.max(28, 28 / scale)} 
+                        className="fill-transparent cursor-ew-resize"
                         onPointerDown={(e) => {
                           e.stopPropagation();
                           e.preventDefault();
                           setIsDraggingRadius(true);
-                          e.currentTarget.setPointerCapture(e.pointerId);
                         }}
                       />
+ 
+                      {/* Live text tag directly on the image next to the knob */}
+                      <g transform={`translate(${handleX}, ${handleY - 16/scale})`}>
+                        <rect 
+                          x={-28 / scale} y={-8 / scale} width={56 / scale} height={16 / scale} rx={4 / scale}
+                          className="fill-slate-900/90 stroke-white" strokeWidth={1 / scale}
+                        />
+                        <text 
+                          x={0} y={3 / scale} fontSize={10 / scale} textAnchor="middle" fontWeight="black" fill="white"
+                          className="pointer-events-none font-sans"
+                        >
+                          {(sp.r / PIXELS_PER_METER).toFixed(1).replace('.', ',')} m
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })()
+              )}
+ 
+              {/* Angle Drag Handle for selected sprinkler */}
+              {selectedSprinklerIdx !== null && sprinklers[selectedSprinklerIdx] && (
+                (() => {
+                  const sp = sprinklers[selectedSprinklerIdx];
+                  if (sp.angleDeg >= 359) return null; // No angle handle needed for full 360 degree circle
+                  const angleHandleX = sp.x + sp.r * Math.cos(sp.angleEnd);
+                  const angleHandleY = sp.y + sp.r * Math.sin(sp.angleEnd);
+                  return (
+                    <g key={`selected-angle-guides-${selectedSprinklerIdx}`}>
+                      {/* Line of target angle limit */}
+                      <line 
+                        x1={sp.x} y1={sp.y} x2={angleHandleX} y2={angleHandleY} 
+                        stroke="#64748b" strokeWidth={2 / scale} strokeDasharray={`${3/scale},${3/scale}`} 
+                      />
+                      
+                      {/* Pulse visual indicator behind angle knob */}
+                      <circle 
+                        cx={angleHandleX} cy={angleHandleY} r={16 / scale} 
+                        className="fill-slate-500/10 animate-pulse pointer-events-none" 
+                      />
+                      
+                      {/* Actual visual knob (Angle) */}
+                      <circle 
+                        cx={angleHandleX} cy={angleHandleY} r={8 / scale} 
+                        className="fill-slate-700 stroke-white cursor-pointer hover:fill-slate-800 hover:scale-125 transition-transform shadow-lg" 
+                        strokeWidth={2.5 / scale}
+                      />
+                      
+                      {/* Large invisible padding hit segment for finger or point-dragging */}
+                      <circle 
+                        cx={angleHandleX} cy={angleHandleY} r={Math.max(28, 28 / scale)} 
+                        className="fill-transparent cursor-pointer"
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setIsDraggingAngle(true);
+                        }}
+                      />
+ 
+                      {/* Live text tag directly on the image next to the angle knob */}
+                      <g transform={`translate(${angleHandleX}, ${angleHandleY + 22/scale})`}>
+                        <rect 
+                          x={-28 / scale} y={-8 / scale} width={56 / scale} height={16 / scale} rx={4 / scale}
+                          className="fill-slate-800/90 stroke-white" strokeWidth={1 / scale}
+                        />
+                        <text 
+                          x={0} y={3 / scale} fontSize={10 / scale} textAnchor="middle" fontWeight="black" fill="white"
+                          className="pointer-events-none font-sans"
+                        >
+                          {Math.round(sp.angleDeg)}°
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })()
+              )}
+
+              {/* Angle Drag Handle for selected sprinkler (Start angle) */}
+              {selectedSprinklerIdx !== null && sprinklers[selectedSprinklerIdx] && (
+                (() => {
+                  const sp = sprinklers[selectedSprinklerIdx];
+                  if (sp.angleDeg >= 359) return null; // No angle handle needed for full 360 degree circle
+                  const angleStartHandleX = sp.x + sp.r * Math.cos(sp.angleStart);
+                  const angleStartHandleY = sp.y + sp.r * Math.sin(sp.angleStart);
+                  return (
+                    <g key={`selected-angle-start-guides-${selectedSprinklerIdx}`}>
+                      {/* Line of target angle limit (Start) */}
+                      <line 
+                        x1={sp.x} y1={sp.y} x2={angleStartHandleX} y2={angleStartHandleY} 
+                        stroke="#475569" strokeWidth={2 / scale} strokeDasharray={`${3/scale},${3/scale}`} 
+                      />
+                      
+                      {/* Pulse visual indicator behind angle start knob */}
+                      <circle 
+                        cx={angleStartHandleX} cy={angleStartHandleY} r={16 / scale} 
+                        className="fill-slate-500/10 animate-pulse pointer-events-none" 
+                      />
+                      
+                      {/* Actual visual knob (Angle Start) */}
+                      <circle 
+                        cx={angleStartHandleX} cy={angleStartHandleY} r={8 / scale} 
+                        className="fill-slate-600 stroke-white cursor-pointer hover:fill-slate-700 hover:scale-125 transition-transform shadow-lg" 
+                        strokeWidth={2.5 / scale}
+                      />
+                      
+                      {/* Large invisible padding hit segment for finger or point-dragging */}
+                      <circle 
+                        cx={angleStartHandleX} cy={angleStartHandleY} r={Math.max(28, 28 / scale)} 
+                        className="fill-transparent cursor-pointer"
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          e.preventDefault();
+                          setIsDraggingAngleStart(true);
+                        }}
+                      />
+ 
+                      {/* Live text tag next to the start angle knob */}
+                      <g transform={`translate(${angleStartHandleX}, ${angleStartHandleY - 22/scale})`}>
+                        <rect 
+                          x={-28 / scale} y={-8 / scale} width={56 / scale} height={16 / scale} rx={4 / scale}
+                          className="fill-slate-700/90 stroke-white" strokeWidth={1 / scale}
+                        />
+                        <text 
+                          x={0} y={3 / scale} fontSize={10 / scale} textAnchor="middle" fontWeight="black" fill="white"
+                          className="pointer-events-none font-sans"
+                        >
+                          Start
+                        </text>
+                      </g>
                     </g>
                   );
                 })()
@@ -2697,52 +3598,72 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-slate-900/95 backdrop-blur-md px-4 py-8"
+              className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-slate-50/98 backdrop-blur-md px-3 sm:px-4 py-8 overflow-y-auto"
             >
-              <div className="max-w-xl w-full text-center space-y-8 select-none">
-                <div>
-                  <div className="w-16 h-16 bg-emerald-500/10 text-emerald-400 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-emerald-500/20 shadow-md">
-                    <Droplet className="w-8 h-8" />
+              <div className="max-w-xl w-full text-center space-y-5 sm:space-y-6 select-none p-1 shrink-0 my-auto">
+                <div className="space-y-2">
+                  <div className="inline-flex w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl items-center justify-center border border-emerald-100 shadow-sm">
+                    <Droplet className="w-5 h-5 animate-pulse" />
                   </div>
-                  <h2 className="text-3xl font-black text-white tracking-tight sm:text-4xl font-sans">Wie möchtest du starten?</h2>
-                  <p className="mt-3 text-sm text-slate-400 sm:text-base font-sans leading-relaxed">
-                    Wähle dein bevorzugtes Ausgangsszenario für die Gartenbewässerung.
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight font-sans">
+                    Wie möchtest du starten?
+                  </h2>
+                  <p className="text-[11px] sm:text-xs text-slate-500 max-w-sm mx-auto leading-relaxed font-sans font-medium">
+                    Gestalte deinen Garten ganz frei oder nutze eine maßgetreue Skizze als Zeichenvorlage.
                   </p>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-3.5 sm:grid-cols-2 max-w-lg mx-auto">
                   <button 
                     onClick={() => {
                       setStep('draw');
                       setTool('polygon');
                       setShowIntro(true);
                     }}
-                    className="flex flex-col items-center text-center p-6 bg-slate-800/80 border border-slate-700/60 rounded-2xl hover:border-emerald-500 hover:bg-slate-800 transition-all cursor-pointer group space-y-4 shadow-lg shadow-black/20"
+                    type="button"
+                    className="flex flex-col items-center text-center p-5 sm:p-6 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-xl hover:scale-[1.01] shadow-sm transition-all duration-200 cursor-pointer group space-y-4"
                   >
-                    <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div className="w-11 h-11 rounded-xl bg-slate-50 text-emerald-600 flex items-center justify-center border border-slate-100 group-hover:scale-105 group-hover:bg-emerald-50 group-hover:border-emerald-100 transition-all">
                       <PenTool className="w-5 h-5" />
                     </div>
-                    <div>
-                      <h3 className="font-bold text-lg text-white font-sans">Frei einzeichnen</h3>
-                      <p className="text-xs text-slate-300 mt-1.5 leading-relaxed font-sans">
-                        Starte auf dem leeren Raster und gestalte deinen Garten frei durch einfaches Klicken.
+                    <div className="space-y-1">
+                      <h3 className="font-extrabold text-sm sm:text-base text-slate-900 font-sans tracking-wide">Frei einzeichnen</h3>
+                      <p className="text-[11px] text-slate-500 leading-normal font-sans">
+                        Starte direkt auf dem leeren Konstruktionsraster und zeichne deine Gartenflächen ein.
                       </p>
                     </div>
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-55 px-2.5 py-0.5 rounded-full border border-emerald-100/50 group-hover:bg-emerald-100/60 transition-colors">
+                      Einfach starten
+                    </span>
                   </button>
 
                   <button 
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex flex-col items-center text-center p-6 bg-slate-800/80 border border-slate-700/60 rounded-2xl hover:border-sky-500 hover:bg-slate-800 transition-all cursor-pointer group space-y-4 shadow-lg shadow-black/20"
+                    type="button"
+                    className="flex flex-col items-center text-center p-5 sm:p-6 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-xl hover:scale-[1.01] shadow-sm transition-all duration-200 cursor-pointer group space-y-4"
                   >
-                    <div className="w-12 h-12 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div className="w-11 h-11 rounded-xl bg-slate-50 text-emerald-600 flex items-center justify-center border border-slate-100 group-hover:scale-105 group-hover:bg-emerald-50 group-hover:border-emerald-100 transition-all">
                       <ImageIcon className="w-5 h-5" />
                     </div>
-                    <div>
-                      <h3 className="font-bold text-lg text-white font-sans">Gartenplan hochladen</h3>
-                      <p className="text-xs text-slate-300 mt-1.5 leading-relaxed font-sans">
-                        Lade eine Skizze, Skizzenfoto oder JPG hoch, um deine Flächen maßgetreu nachzuzeichnen.
+                    <div className="space-y-1">
+                      <h3 className="font-extrabold text-sm sm:text-base text-slate-900 font-sans tracking-wide">Plan hochladen</h3>
+                      <p className="text-[11px] text-slate-500 leading-normal font-sans">
+                        Lade ein Skizzenfoto oder JPG hoch, um deine Flächen maßgetreu nachzuzeichnen.
                       </p>
                     </div>
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-55 px-2.5 py-0.5 rounded-full border border-emerald-100/50 group-hover:bg-emerald-100/60 transition-colors">
+                      JPG / PNG hochladen
+                    </span>
+                  </button>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    onClick={onBack}
+                    type="button"
+                    className="px-5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-slate-300 shadow-sm rounded-xl font-bold transition-all text-xs cursor-pointer"
+                  >
+                    Zurück zum Shop
                   </button>
                 </div>
               </div>
@@ -2754,33 +3675,42 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-slate-900/95 backdrop-blur-md px-4 py-8"
+              className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-slate-50/98 backdrop-blur-md px-3 sm:px-4 py-8 overflow-y-auto"
             >
-              <div className="max-w-xl w-full text-center space-y-8 select-none">
-                <div>
-                  <h2 className="text-3xl font-black text-white tracking-tight sm:text-4xl font-sans">Planungsmethode wählen</h2>
-                  <p className="mt-3 text-sm text-slate-400 sm:text-base font-sans leading-relaxed">
-                    Möchtest du manuell dein System entwerfen oder die intelligente Assistenz schalten?
+              <div className="max-w-xl w-full text-center space-y-5 sm:space-y-6 select-none p-1 shrink-0 my-auto">
+                <div className="space-y-2">
+                  <div className="inline-flex w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl items-center justify-center border border-emerald-100 shadow-sm">
+                    <Cpu className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight font-sans">
+                    Planungsmethode wählen
+                  </h2>
+                  <p className="text-[11px] sm:text-xs text-slate-500 max-w-sm mx-auto leading-relaxed font-sans font-medium">
+                    Möchtest du Rohrleitungen manuell verlegen oder die intelligente Komplettplanung anwenden?
                   </p>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-3.5 sm:grid-cols-2 max-w-lg mx-auto">
                   <button 
                     onClick={() => {
-                      setStep('pipeline_drawing');
-                      setTool('draw_pipe');
+                      setStep('irrigation_manual');
+                      setTool('add_sprinkler');
                     }}
-                    className="flex flex-col items-center text-center p-6 bg-slate-800/80 border border-slate-700/60 rounded-2xl hover:border-blue-500 hover:bg-slate-800 transition-all cursor-pointer group space-y-4 shadow-lg shadow-black/20"
+                    type="button"
+                    className="flex flex-col items-center text-center p-5 sm:p-6 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-xl hover:scale-[1.01] shadow-sm transition-all duration-200 cursor-pointer group space-y-4"
                   >
-                    <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-                      <PenTool className="w-5 h-5" />
+                    <div className="w-11 h-11 rounded-xl bg-slate-50 text-emerald-600 flex items-center justify-center border border-slate-100 group-hover:scale-105 group-hover:bg-emerald-50 group-hover:border-emerald-100 transition-all">
+                      <Hand className="w-5 h-5" />
                     </div>
-                    <div>
-                      <h3 className="font-bold text-lg text-white font-sans">Manuelle Planung</h3>
-                      <p className="text-xs text-slate-300 mt-1.5 leading-relaxed font-sans">
-                        Zeichne Rohrleitungen selbst und platziere Regner, Tropfschläuche sowie RZWS-Systeme nach Wunsch.
+                    <div className="space-y-1">
+                      <h3 className="font-extrabold text-sm sm:text-base text-slate-900 font-sans tracking-wide">Manuelle Komplettplanung</h3>
+                      <p className="text-[11px] text-slate-500 leading-normal font-sans">
+                        Platziere Regner, PE-Zuleitungen, Tropfschläuche & Steuergeräte frei nach deinen Vorstellungen.
                       </p>
                     </div>
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-55 px-2.5 py-0.5 rounded-full border border-emerald-100/50 group-hover:bg-emerald-100/60 transition-colors">
+                      Eigene Platzierung
+                    </span>
                   </button>
 
                   <button 
@@ -2788,17 +3718,31 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
                       setStep('infrastructure');
                       setTool('water_source');
                     }}
-                    className="flex flex-col items-center text-center p-6 bg-slate-800/80 border border-slate-700/60 rounded-2xl hover:border-emerald-500 hover:bg-slate-800 transition-all cursor-pointer group space-y-4 shadow-lg shadow-black/20"
+                    type="button"
+                    className="flex flex-col items-center text-center p-5 sm:p-6 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-xl hover:scale-[1.01] shadow-sm transition-all duration-200 cursor-pointer group space-y-4"
                   >
-                    <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div className="w-11 h-11 rounded-xl bg-slate-50 text-emerald-600 flex items-center justify-center border border-slate-100 group-hover:scale-105 group-hover:bg-emerald-50 group-hover:border-emerald-100 transition-all">
                       <Cpu className="w-5 h-5" />
                     </div>
-                    <div>
-                      <h3 className="font-bold text-lg text-white font-sans">Automatische Komplettplanung</h3>
-                      <p className="text-xs text-slate-300 mt-1.5 leading-relaxed font-sans">
-                        Gib die Wasserquelle an und lass das intelligente System Regner und Rohre automatisch platzieren.
+                    <div className="space-y-1">
+                      <h3 className="font-extrabold text-sm sm:text-base text-slate-900 font-sans tracking-wide">Automatische Planung</h3>
+                      <p className="text-[11px] text-slate-500 leading-normal font-sans">
+                        Setze Wasserquelle & Reglerbox. Den Rest erledigt das System vollautomatisch für dich.
                       </p>
                     </div>
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-55 px-2.5 py-0.5 rounded-full border border-emerald-100/50 group-hover:bg-emerald-100/60 transition-colors">
+                      Assistent (Empfohlen)
+                    </span>
+                  </button>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    onClick={() => setStep('draw')}
+                    type="button"
+                    className="px-5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-slate-300 shadow-sm rounded-xl font-bold transition-all text-xs cursor-pointer"
+                  >
+                    Zurück zum Garten-Plan
                   </button>
                 </div>
               </div>
@@ -2810,50 +3754,73 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-slate-900/95 backdrop-blur-md px-4 py-8"
+              className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-slate-50/98 backdrop-blur-md px-3 sm:px-4 py-8 overflow-y-auto"
             >
-              <div className="max-w-xl w-full text-center space-y-8 select-none">
-                <div>
-                  <h2 className="text-3xl font-black text-white tracking-tight sm:text-4xl font-sans font-sans">Komponenten-Verteilung</h2>
-                  <p className="mt-3 text-sm text-slate-400 sm:text-base font-sans leading-relaxed">
-                    Deine Leitungen stehen. Wie sollen die Verbraucher darauf platziert werden?
+              <div className="max-w-xl w-full text-center space-y-5 sm:space-y-6 select-none p-1 shrink-0 my-auto">
+                <div className="space-y-2">
+                  <div className="inline-flex w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl items-center justify-center border border-emerald-100 shadow-sm">
+                    <Droplet className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight font-sans">
+                    Komponenten-Bestückung
+                  </h2>
+                  <p className="text-[11px] sm:text-xs text-slate-500 max-w-sm mx-auto leading-relaxed font-sans font-medium">
+                    Wie sollen Regner, Tropfschläuche und Anschlussboxen platziert werden?
                   </p>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-3.5 sm:grid-cols-2 max-w-lg mx-auto">
                   <button 
                     onClick={() => {
                       setStep('irrigation_manual');
                       setTool('add_sprinkler');
                     }}
-                    className="flex flex-col items-center text-center p-6 bg-slate-800/80 border border-slate-700/60 rounded-2xl hover:border-blue-500 hover:bg-slate-800 transition-all cursor-pointer group space-y-4 shadow-lg shadow-black/20"
+                    type="button"
+                    className="flex flex-col items-center text-center p-5 sm:p-6 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-xl hover:scale-[1.01] shadow-sm transition-all duration-200 cursor-pointer group space-y-4"
                   >
-                    <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div className="w-11 h-11 rounded-xl bg-slate-50 text-emerald-600 flex items-center justify-center border border-slate-100 group-hover:scale-105 group-hover:bg-emerald-50 group-hover:border-emerald-100 transition-all">
                       <Hand className="w-5 h-5" />
                     </div>
-                    <div>
-                      <h3 className="font-bold text-lg text-white font-sans">Manuell setzen</h3>
-                      <p className="text-xs text-slate-300 mt-1.5 leading-relaxed font-sans">
-                        Platziere jeden Regner, RZWS und Tropfschlauch einzeln nacheinander auf deinen gezeichneten Linien.
+                    <div className="space-y-1">
+                      <h3 className="font-extrabold text-sm sm:text-base text-slate-900 font-sans tracking-wide">Manuell platzieren</h3>
+                      <p className="text-[11px] text-slate-500 leading-normal font-sans">
+                        Platziere jeden Regner, Tiefenbewässerungen & Tropfschläuche ganz individuell.
                       </p>
                     </div>
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-55 px-2.5 py-0.5 rounded-full border border-emerald-100/50 group-hover:bg-emerald-100/60 transition-colors">
+                      Eigene Aufteilung
+                    </span>
                   </button>
 
                   <button 
                     onClick={() => {
                       runCalculation();
                     }}
-                    className="flex flex-col items-center text-center p-6 bg-slate-800/80 border border-slate-700/60 rounded-2xl hover:border-emerald-500 hover:bg-slate-800 transition-all cursor-pointer group space-y-4 shadow-lg shadow-black/20"
+                    type="button"
+                    className="flex flex-col items-center text-center p-5 sm:p-6 bg-white border border-slate-200 rounded-2xl hover:border-emerald-500 hover:shadow-xl hover:scale-[1.01] shadow-sm transition-all duration-200 cursor-pointer group space-y-4"
                   >
-                    <div className="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <div className="w-11 h-11 rounded-xl bg-slate-50 text-emerald-600 flex items-center justify-center border border-slate-100 group-hover:scale-105 group-hover:bg-emerald-50 group-hover:border-emerald-100 transition-all">
                       <Cpu className="w-5 h-5" />
                     </div>
-                    <div>
-                      <h3 className="font-bold text-lg text-white font-sans">Automatisch bestücken lassen</h3>
-                      <p className="text-xs text-slate-300 mt-1.5 leading-relaxed font-sans">
-                        Lass den intelligenten Generator Regner, Tropfschläuche und Anschlussfittings automatisch anordnen.
+                    <div className="space-y-1">
+                      <h3 className="font-extrabold text-sm sm:text-base text-slate-900 font-sans tracking-wide">Automatisch bestücken</h3>
+                      <p className="text-[11px] text-slate-500 leading-normal font-sans">
+                        Lass das System deine Leitungen analysieren und Verbraucher optimal darauf platzieren.
                       </p>
                     </div>
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-55 px-2.5 py-0.5 rounded-full border border-emerald-100/50 group-hover:bg-emerald-100/60 transition-colors">
+                      Smart Bestücken
+                    </span>
+                  </button>
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    onClick={() => setStep('pipeline_drawing')}
+                    type="button"
+                    className="px-5 py-2.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 hover:border-slate-300 shadow-sm rounded-xl font-bold transition-all text-xs cursor-pointer"
+                  >
+                    Zurück zur Leitungsplanung
                   </button>
                 </div>
               </div>
@@ -2957,7 +3924,7 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
                    }}>
                       <div className="mb-4">
                          <label className="block text-sm font-bold text-gray-700 mb-2">Art der Wasserquelle</label>
-                         <select name="sourceType" className="w-full p-3 rounded-lg border border-gray-300 bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500">
+                         <select name="sourceType" className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-800 shadow-xs focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none cursor-pointer">
                            <option value="fresh">Frischwasser (Hausanschluss)</option>
                            <option value="cistern">Zisterne mit Pumpe</option>
                            <option value="well">Brunnenwasser</option>
@@ -2965,12 +3932,12 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
                       </div>
                       <div className="mb-6">
                          <label className="block text-sm font-bold text-gray-700 mb-2">Wasserdruck (Bar)</label>
-                         <input type="number" name="pressure" step="0.1" defaultValue="3.5" min="1" max="10" className="w-full p-3 rounded-lg border border-gray-300 bg-gray-50 outline-none focus:ring-2 focus:ring-blue-500"/>
+                         <input type="number" name="pressure" step="0.1" defaultValue="3.5" min="1" max="10" className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-800 shadow-xs focus:border-emerald-600 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"/>
                          <p className="text-xs text-gray-500 mt-1">Für Hunter MP Rotator sollten mindestens 2,5 Bar am Regner anliegen (Empfehlung 2,8 Bar).</p>
                       </div>
                       <div className="flex gap-3">
                          <button type="button" onClick={() => setPendingInfra(null)} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200">Abbrechen</button>
-                         <button type="submit" className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700">Speichern</button>
+                         <button type="submit" className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 shadow-md">Speichern</button>
                       </div>
                    </form>
                 </div>

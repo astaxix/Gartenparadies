@@ -52,6 +52,8 @@ export interface VolumePricing {
 export interface CartItem extends Product {
   quantity: number;
   selectedVariations?: Record<string, string>; // variationId -> option name
+  isPlannerPackage?: boolean;
+  plannerData?: any;
 }
 
 export interface Order {

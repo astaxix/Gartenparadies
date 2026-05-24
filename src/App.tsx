@@ -117,8 +117,20 @@ function AppContent() {
   };
 
   // Actions
-  const handleAddToCart = (product: Product, selectedVariations?: Record<string, string>, addedQuantity: number = 1) => {
+  const handleAddToCart = (product: Product, selectedVariations?: Record<string, string>, addedQuantity: number = 1, customProps?: Partial<CartItem>) => {
     setCartItems(prev => {
+      if (customProps?.isPlannerPackage) {
+        // Replace or add the Planner Package
+        const filtered = prev.filter(item => !item.isPlannerPackage);
+        const newItem: CartItem = {
+          ...product,
+          price: product.price,
+          quantity: addedQuantity,
+          selectedVariations,
+          ...customProps
+        } as CartItem;
+        return [...filtered, newItem];
+      }
       const existingKey = product.id + JSON.stringify(selectedVariations || {});
       const existing = prev.find(item => item.id + JSON.stringify(item.selectedVariations || {}) === existingKey);
       
@@ -189,7 +201,14 @@ function AppContent() {
           )
         } />
         
-        <Route path="/planer" element={<Planner products={products} />} />
+        <Route path="/planer" element={
+          <Planner 
+            products={products} 
+            onAddToCart={handleAddToCart}
+            onOpenCart={() => setIsCartOpen(true)}
+            cartItems={cartItems}
+          />
+        } />
 
         <Route path="/" element={
           <ShopFront 

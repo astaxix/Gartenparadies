@@ -1,22 +1,45 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Droplets, Map, Sun, CheckCircle, Download, ShoppingCart, Minus, Plus, AlertCircle, ShoppingBag, ShieldCheck } from 'lucide-react';
 import { motion } from 'motion/react';
 import PlannerCanvas, { PlannerData } from './PlannerCanvas';
-import { Product } from '../types';
+import { Product, CartItem } from '../types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 interface PlannerProps {
   products?: Product[];
+  onAddToCart?: (product: Product, selectedVariations?: Record<string, string>, addedQuantity?: number, customProps?: any) => void;
+  onOpenCart?: () => void;
+  cartItems?: CartItem[];
 }
 
-export default function Planner({ products = [] }: PlannerProps) {
+export default function Planner({ 
+  products = [],
+  onAddToCart,
+  onOpenCart,
+  cartItems = []
+}: PlannerProps) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [activeStep, setActiveStep] = useState<'menu' | 'canvas' | 'bom'>('menu');
   const [plannerData, setPlannerData] = useState<PlannerData | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isSelbstbau, setIsSelbstbau] = useState(false);
+
+  // Restore calculated planner view if requested from shopping cart
+  const queryParams = new URLSearchParams(location.search);
+  const viewPackageRequested = queryParams.get('view_package') === 'true';
+
+  useEffect(() => {
+    if (viewPackageRequested && cartItems.length > 0) {
+      const activePkg = cartItems.find(item => item.isPlannerPackage);
+      if (activePkg && activePkg.plannerData) {
+        setPlannerData(activePkg.plannerData);
+        setActiveStep('bom');
+      }
+    }
+  }, [viewPackageRequested, cartItems]);
 
   // Custom materials quantity and pressure states
   const [customRows, setCustomRows] = useState<any[] | null>(null);
@@ -1037,7 +1060,44 @@ export default function Planner({ products = [] }: PlannerProps) {
                )}
 
               {/* Ordering / Checkout button section */}
-              <div className="mt-6 border-t border-dashed border-gray-100 pt-6 flex flex-col sm:flex-row justify-end gap-3 print:hidden">
+              <div className="mt-6 border-t border-dashed border-gray-100 pt-6 flex flex-col sm:flex-row justify-end gap-4 print:hidden">
+                 <button
+                    onClick={() => {
+                       if (!isReducedPressureValid()) {
+                          setReducedPressureError("Bitte gib einen korrekten reduzierten Druck an (Pflichtfeld)");
+                          return;
+                       }
+                       if (onAddToCart && plannerData) {
+                          const planProduct = {
+                            id: 'planner-package-active',
+                            name: 'Plan-Paket im Warenkorb',
+                            description: `Dein berechnetes Bewässerungssystem: ${plannerData.zones} Zonen, ${plannerData.sprinklers} Regner, PE-Rohre und Fittings. Gesamtgarten: ${Math.round(plannerData.gardenArea || 0)} m².`,
+                            price: totalSum,
+                            category: 'Planer Artikel',
+                            imageUrl: 'https://images.unsplash.com/photo-1599599810769-bcde5a160d32?q=80&w=400&auto=format&fit=crop',
+                            stock: 9999,
+                            articleNumber: 'PL-PAKET-CUSTOM',
+                            metaTitle: 'Plan-Paket',
+                            metaDescription: '',
+                            metaAdsText: '',
+                            variations: [],
+                          };
+                          onAddToCart(planProduct, {}, 1, {
+                            isPlannerPackage: true,
+                            plannerData: plannerData
+                          });
+                          if (onOpenCart) {
+                            onOpenCart();
+                          }
+                       }
+                    }}
+                    disabled={!isReducedPressureValid()}
+                    className="flex items-center justify-center gap-2 px-5 py-3.5 bg-blue-50 border-2 border-blue-200 text-blue-800 hover:bg-blue-100 hover:border-blue-400 font-extrabold text-sm rounded-xl transition shadow-xs active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto cursor-pointer font-sans"
+                 >
+                    <ShoppingCart className="w-4 h-4" />
+                    In den Warenkorb legen
+                 </button>
+
                  <button
                     onClick={() => {
                        if (!isReducedPressureValid()) {
@@ -1047,10 +1107,10 @@ export default function Planner({ products = [] }: PlannerProps) {
                        setIsOrderModalOpen(true);
                     }}
                     disabled={!isReducedPressureValid()}
-                    className="flex items-center justify-center gap-2.5 px-6 py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-base rounded-2xl transition shadow-lg hover:shadow-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
+                    className="flex items-center justify-center gap-2 px-5 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm rounded-xl transition shadow-md hover:shadow-lg active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto cursor-pointer font-sans"
                  >
-                    <ShoppingBag className="w-5 h-5" />
-                    Diese Materialien Bestellen
+                    <ShoppingBag className="w-4 h-4" />
+                    Direkt bestellen
                  </button>
               </div>
            </div>
