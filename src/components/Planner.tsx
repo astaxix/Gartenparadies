@@ -1,35 +1,80 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, Droplets, Map, Sun, CheckCircle, Download, ShoppingCart, Minus, Plus, AlertCircle, ShoppingBag, ShieldCheck } from 'lucide-react';
-import { motion } from 'motion/react';
+import { ArrowLeft, Droplets, Map, Sun, CheckCircle, Download, ShoppingCart, Minus, Plus, AlertCircle, ShoppingBag, ShieldCheck, User, FileText, X, Check, ArrowRight, Trash2, Save } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import PlannerCanvas, { PlannerData } from './PlannerCanvas';
 import { Product, CartItem } from '../types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { db, auth, loginWithGoogle } from '../lib/firebase';
+import { doc, getDoc, setDoc, getDocs, collection, query, where, deleteDoc } from 'firebase/firestore';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 
 interface PlannerProps {
   products?: Product[];
   onAddToCart?: (product: Product, selectedVariations?: Record<string, string>, addedQuantity?: number, customProps?: any) => void;
   onOpenCart?: () => void;
   cartItems?: CartItem[];
+  currentUser?: any;
+  setCurrentUser?: (user: any) => void;
 }
 
 export default function Planner({ 
   products = [],
   onAddToCart,
   onOpenCart,
-  cartItems = []
+  cartItems = [],
+  currentUser,
+  setCurrentUser
 }: PlannerProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [activeStep, setActiveStep] = useState<'menu' | 'canvas' | 'bom'>('menu');
+  const [activeStep, setActiveStep] = useState<'menu' | 'canvas' | 'bom'>('canvas');
   const [plannerData, setPlannerData] = useState<PlannerData | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isSelbstbau, setIsSelbstbau] = useState(false);
 
-  // Restore calculated planner view if requested from shopping cart
+  const [savedCanvasState, setSavedCanvasState] = useState<any | null>(null);
+
+  // Saved plans states
+  const [isSavedPlansModalOpen, setIsSavedPlansModalOpen] = useState(false);
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [savePlanName, setSavePlanName] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [onlinePlans, setOnlinePlans] = useState<any[]>([]);
+
+  // Auth inside Planner
+  const [isPlannerAuthModalOpen, setIsPlannerAuthModalOpen] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [authError, setAuthError] = useState("");
+  const [regUsername, setRegUsername] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+  const [regPasswordRepeat, setRegPasswordRepeat] = useState("");
+  const [regName, setRegName] = useState("");
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+
+  // Restore calculated planner view if requested from shopping cart or url params
   const queryParams = new URLSearchParams(location.search);
   const viewPackageRequested = queryParams.get('view_package') === 'true';
+
+  useEffect(() => {
+    if (!currentUser || !isSavedPlansModalOpen) return;
+
+    async function fetchPlans() {
+      try {
+        const q = query(collection(db, 'plans'), where('userId', '==', currentUser.id));
+        const s = await getDocs(q);
+        const loaded = s.docs.map(doc => doc.data());
+        setOnlinePlans(loaded);
+      } catch (err) {
+        console.error('Failed fetching plans from Firestore:', err);
+      }
+    }
+    fetchPlans();
+  }, [currentUser, isSavedPlansModalOpen]);
 
   useEffect(() => {
     if (viewPackageRequested && cartItems.length > 0) {
@@ -39,7 +84,44 @@ export default function Planner({
         setActiveStep('bom');
       }
     }
-  }, [viewPackageRequested, cartItems]);
+
+    const planId = queryParams.get('load_plan');
+    if (planId) {
+      async function fetchPlanOnline() {
+        try {
+          const docRef = doc(db, 'plans', planId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const plan = docSnap.data();
+            if (plan && plan.canvasState) {
+              setPlannerData(plan.plannerData || null);
+              setSavedCanvasState(plan.canvasState);
+              setActiveStep('canvas');
+            }
+          } else {
+            // Fallback to local storage if not found online
+            const allPlans = JSON.parse(localStorage.getItem('gartenparadies_saved_plans') || '[]');
+            const plan = allPlans.find((p: any) => p.id === planId);
+            if (plan && plan.canvasState) {
+              setPlannerData(plan.plannerData || null);
+              setSavedCanvasState(plan.canvasState);
+              setActiveStep('canvas');
+            }
+          }
+        } catch (e) {
+          console.error("Failed online plan retrieval, falling back:", e);
+          const allPlans = JSON.parse(localStorage.getItem('gartenparadies_saved_plans') || '[]');
+          const plan = allPlans.find((p: any) => p.id === planId);
+          if (plan && plan.canvasState) {
+            setPlannerData(plan.plannerData || null);
+            setSavedCanvasState(plan.canvasState);
+            setActiveStep('canvas');
+          }
+        }
+      }
+      fetchPlanOnline();
+    }
+  }, [viewPackageRequested, cartItems, location.search]);
 
   // Custom materials quantity and pressure states
   const [customRows, setCustomRows] = useState<any[] | null>(null);
@@ -671,6 +753,148 @@ export default function Planner({
      }, 1200);
   };
 
+  const handlePlannerSaveConfirm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser || !plannerData) return;
+
+    try {
+      const planId = savedCanvasState?.id || 'plan-' + Date.now();
+      const canvasState = savedCanvasState || {
+        id: planId,
+        shapes: [],
+        sprinklers: [],
+        pipes: [],
+        infraNodes: [],
+        manualPipes: [],
+        manualDripLines: [],
+        manualRzws: [],
+        bgImage: null,
+        elevationDiff: 0,
+        inletPressure: plannerData.pressure || 3.5,
+        extraBends: 0,
+        step: 'calculation',
+        scale: 1,
+        pan: { x: 0, y: 0 }
+      };
+
+      const newPlan = {
+        id: planId,
+        userId: currentUser.id,
+        name: savePlanName || "Mein Bewässerungsplan",
+        lastEdited: new Date().toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' }),
+        canvasState,
+        plannerData: {
+          ...plannerData,
+          pressure: plannerData.pressure || 3.5
+        }
+      };
+
+      // Save plan online to Firestore '/plans'
+      await setDoc(doc(db, 'plans', planId), newPlan);
+
+      // Save locally as backup
+      let plans = [];
+      try {
+        plans = JSON.parse(localStorage.getItem('gartenparadies_saved_plans') || '[]');
+      } catch (e) {
+        plans = [];
+      }
+
+      const existingIdx = plans.findIndex((p: any) => p.id === planId);
+      if (existingIdx !== -1) {
+        plans[existingIdx] = newPlan;
+      } else {
+        plans.push(newPlan);
+      }
+
+      localStorage.setItem('gartenparadies_saved_plans', JSON.stringify(plans));
+      setSaveSuccess(true);
+      setTimeout(() => {
+        setSaveSuccess(false);
+        setIsSaveModalOpen(false);
+      }, 1500);
+    } catch (e: any) {
+      console.error(e);
+      alert("Fehler beim Cloud-Speichern des Plans: " + e.message);
+    }
+  };
+
+  const handlePlannerAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+
+    if (isRegistering) {
+      if (!regEmail || !regPassword) {
+        setAuthError("Bitte fülle E-Mail und Passwort aus.");
+        return;
+      }
+      if (regPassword !== regPasswordRepeat) {
+        setAuthError("Die Passwörter stimmen nicht überein.");
+        return;
+      }
+
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, regEmail, regPassword);
+        const fbUser = userCredential.user;
+        const newUser = {
+          id: fbUser.uid,
+          username: regUsername || regEmail.split('@')[0],
+          email: regEmail,
+          name: regName || regUsername || regEmail.split('@')[0]
+        };
+
+        await setDoc(doc(db, 'users', fbUser.uid), newUser);
+
+        if (setCurrentUser) {
+          setCurrentUser(newUser);
+        }
+
+        setIsPlannerAuthModalOpen(false);
+        setSavePlanName(`Plan - ${new Date().toLocaleDateString('de-DE')}`);
+        setIsSaveModalOpen(true);
+      } catch (err: any) {
+        console.error('Registration failed:', err);
+        setAuthError(err.message || "Registrierung fehlgeschlagen.");
+      }
+    } else {
+      if (!loginUsername || !loginPassword) {
+        setAuthError("Bitte fülle alle Login-Felder aus.");
+        return;
+      }
+
+      try {
+        // Here, users can enter either their email or username. 
+        // We evaluate username as an email address.
+        const emailToLogin = loginUsername.includes('@') ? loginUsername : `${loginUsername}@gartenparadies.com`;
+        const userCredential = await signInWithEmailAndPassword(auth, emailToLogin.trim(), loginPassword);
+        const fbUser = userCredential.user;
+
+        const docRef = doc(db, 'users', fbUser.uid);
+        const docSnap = await getDoc(docRef);
+        let userData = {
+          id: fbUser.uid,
+          username: fbUser.email?.split('@')[0] || 'user',
+          email: fbUser.email || '',
+          name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Kunde'
+        };
+
+        if (docSnap.exists()) {
+          userData = { ...userData, ...docSnap.data() };
+        }
+
+        if (setCurrentUser) {
+          setCurrentUser(userData);
+        }
+        setIsPlannerAuthModalOpen(false);
+        setSavePlanName(`Plan - ${new Date().toLocaleDateString('de-DE')}`);
+        setIsSaveModalOpen(true);
+      } catch (err: any) {
+        console.error('Login failed:', err);
+        setAuthError("Benutzername/E-Mail oder Passwort falsch.");
+      }
+    }
+  };
+
   const handleExportPDF = async () => {
     setIsExporting(true);
     const element = document.getElementById('bom-container');
@@ -722,12 +946,27 @@ export default function Planner({
   };
 
   if (activeStep === 'canvas') {
-    return <PlannerCanvas onBack={() => setActiveStep('menu')} onNext={handleNext} />;
+    return (
+      <PlannerCanvas 
+        onBack={() => {
+          setSavedCanvasState(null);
+          navigate('/');
+        }} 
+        onNext={(data, rawState) => {
+          setSavedCanvasState(rawState);
+          handleNext(data);
+        }}
+        initialState={savedCanvasState}
+        currentUser={currentUser}
+        setCurrentUser={setCurrentUser}
+      />
+    );
   }
 
   if (activeStep === 'bom' && plannerData) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
+      <>
+        <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
         <header className="bg-white shadow-sm sticky top-0 z-40 border-b border-gray-200 w-full p-3 sm:p-4 print:hidden">
           <div className="max-w-[1000px] mx-auto flex items-center justify-between">
             <button 
@@ -751,6 +990,68 @@ export default function Planner({
                 <span className="hidden sm:inline">{isExporting ? 'Wird erstellt...' : 'PDF Exportieren'}</span>
                 <span className="sm:hidden">{isExporting ? 'Bitte warten' : 'PDF'}</span>
               </button>
+
+              <div className="relative">
+                <button 
+                  onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+                  className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer"
+                >
+                  {currentUser ? (
+                    <span className="text-sm font-bold uppercase">{currentUser.name[0]}</span>
+                  ) : (
+                    <User className="w-5 h-5" />
+                  )}
+                </button>
+                
+                {isUserDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-150 overflow-hidden z-50 p-4">
+                    {currentUser ? (
+                      <div className="space-y-3 text-left">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider font-sans">Mein Konto</p>
+                        <div>
+                          <p className="text-sm font-bold text-gray-800 font-sans">{currentUser.name}</p>
+                          <p className="text-xs text-gray-500 font-sans">{currentUser.email}</p>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            setIsUserDropdownOpen(false);
+                            setIsSavedPlansModalOpen(true);
+                          }}
+                          className="w-full font-sans text-left flex items-center gap-2 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors font-medium cursor-pointer"
+                        >
+                          <FileText className="w-4 h-4" />
+                          <span>Meine Pläne</span>
+                        </button>
+                        <button 
+                          onClick={async () => {
+                            try {
+                              await signOut(auth);
+                            } catch(e) {}
+                            if (setCurrentUser) setCurrentUser(null);
+                            setIsUserDropdownOpen(false);
+                          }}
+                          className="w-full bg-red-50 text-red-650 text-red-600 text-xs font-bold py-2 rounded-lg hover:bg-red-100 transition-colors cursor-pointer font-sans font-bold"
+                        >
+                          Abmelden
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 text-left">
+                        <p className="text-xs text-gray-500 font-sans font-medium">Du bist nicht angemeldet.</p>
+                        <button 
+                          onClick={() => {
+                            setIsUserDropdownOpen(false);
+                            setIsPlannerAuthModalOpen(true);
+                          }}
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 rounded-lg transition-colors cursor-pointer text-center font-sans"
+                        >
+                          Anmelden / Registrieren
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </header>
@@ -1061,6 +1362,20 @@ export default function Planner({
 
               {/* Ordering / Checkout button section */}
               <div className="mt-6 border-t border-dashed border-gray-100 pt-6 flex flex-col sm:flex-row justify-end gap-4 print:hidden">
+                  <button
+                     onClick={() => {
+                        if (!currentUser) {
+                           setIsPlannerAuthModalOpen(true);
+                        } else {
+                           setSavePlanName(`Plan - ${new Date().toLocaleDateString('de-DE')}`);
+                           setIsSaveModalOpen(true);
+                        }
+                     }}
+                     className="flex items-center justify-center gap-2 px-5 py-3.5 bg-slate-100 border border-slate-300 text-slate-800 hover:bg-slate-250 hover:bg-slate-200 font-extrabold text-sm rounded-xl transition shadow-xs active:scale-95 w-full sm:w-auto cursor-pointer font-sans"
+                  >
+                     <Save className="w-4 h-4 text-slate-600" />
+                     Plan speichern
+                  </button>
                  <button
                     onClick={() => {
                        if (!isReducedPressureValid()) {
@@ -1340,7 +1655,7 @@ export default function Planner({
                           onClick={() => {
                              setIsOrderModalOpen(false);
                              setOrderSuccess(false);
-                             setActiveStep('menu');
+                             navigate('/');
                           }}
                           className="w-full py-3.5 bg-gray-900 hover:bg-gray-950 text-white rounded-xl font-extrabold transition text-xs"
                        >
@@ -1352,22 +1667,350 @@ export default function Planner({
            </div>
         )}
       </div>
+
+           {/* Saved Plans Modal */}
+           <AnimatePresence>
+             {isSavedPlansModalOpen && currentUser && (
+               <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans animate-in fade-in duration-200">
+                 <motion.div 
+                   initial={{ scale: 0.95, opacity: 0 }}
+                   animate={{ scale: 1, opacity: 1 }}
+                   exit={{ scale: 0.95, opacity: 0 }}
+                   className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-150 flex flex-col max-h-[85vh]"
+                 >
+                   {/* Header */}
+                   <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                     <div className="flex items-center gap-2">
+                       <FileText className="w-5 h-5 text-emerald-600" />
+                       <h3 className="text-lg font-bold text-gray-900">Meine gespeicherten Pläne</h3>
+                     </div>
+                     <button 
+                       onClick={() => setIsSavedPlansModalOpen(false)}
+                       className="p-1.5 hover:bg-gray-200 text-gray-400 hover:text-gray-600 rounded-full transition-colors cursor-pointer"
+                     >
+                       <X className="w-5 h-5" />
+                     </button>
+                   </div>
+
+                   {/* Body */}
+                   <div className="p-6 overflow-y-auto space-y-4 flex-1">
+                     {onlinePlans.length === 0 ? (
+                       <div className="text-center py-8">
+                         <p className="text-gray-500 text-sm mb-4">Du hast noch keine Bewässerungspläne gespeichert.</p>
+                         <button 
+                           onClick={() => {
+                             setIsSavedPlansModalOpen(false);
+                             setActiveStep('canvas');
+                           }}
+                           className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition duration-150 shadow-md cursor-pointer inline-flex items-center gap-2"
+                         >
+                           Jetzt planen starten
+                           <ArrowRight className="w-4 h-4" />
+                         </button>
+                       </div>
+                     ) : (
+                       onlinePlans.map((plan: any) => (
+                         <div key={plan.id} className="p-4 rounded-xl border border-gray-200 bg-white hover:border-emerald-500 hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                           <div className="space-y-1 select-none text-left">
+                             <h4 className="font-bold text-gray-900 text-base">{plan.name}</h4>
+                             <p className="text-xs text-gray-400">Zuletzt bearbeitet: {plan.lastEdited}</p>
+                             <div className="flex flex-wrap items-center gap-2 pt-1 text-xs font-semibold text-emerald-700">
+                               {plan.plannerData?.sprinklers !== undefined && (
+                                 <span className="bg-emerald-50 px-2 py-0.5 rounded-md">
+                                   Regner: {plan.plannerData.sprinklers}
+                                 </span>
+                               )}
+                               {plan.plannerData?.zones !== undefined && (
+                                 <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md">
+                                   Zonen: {plan.plannerData.zones}
+                                 </span>
+                               )}
+                               {plan.plannerData?.gardenArea !== undefined && (
+                                 <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md">
+                                   Fläche: {plan.plannerData.gardenArea} m²
+                                 </span>
+                               )}
+                             </div>
+                           </div>
+                           <div className="flex items-center gap-2 shrink-0">
+                             <button 
+                               onClick={() => {
+                                 setIsSavedPlansModalOpen(false);
+                                 if (plan.canvasState) {
+                                   setPlannerData(plan.plannerData || null);
+                                   setSavedCanvasState(plan.canvasState);
+                                   setActiveStep('canvas');
+                                 }
+                               }}
+                               className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition duration-200 cursor-pointer"
+                             >
+                               Plan laden
+                             </button>
+                             <button 
+                               onClick={async () => {
+                                 if (confirm("Aufgepasst: Möchtest du diesen Plan wirklich löschen?")) {
+                                   try {
+                                     await deleteDoc(doc(db, 'plans', plan.id));
+                                     setOnlinePlans(prev => prev.filter(p => p.id !== plan.id));
+                                   } catch (err) {
+                                     console.error('Error deleting plan:', err);
+                                   }
+                                 }
+                               }}
+                               className="p-2 border border-red-200 text-red-500 hover:bg-red-50 rounded-lg transition duration-200 cursor-pointer"
+                               title="Löschen"
+                             >
+                               <Trash2 className="w-4 h-4" />
+                             </button>
+                           </div>
+                         </div>
+                       ))
+                     )}
+                   </div>
+                 </motion.div>
+               </div>
+             )}
+           </AnimatePresence>
+
+           {/* Planner Registration & Login Auth Modal */}
+           <AnimatePresence>
+             {isPlannerAuthModalOpen && (
+               <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans animate-in fade-in duration-200">
+                 <motion.div 
+                   initial={{ scale: 0.95, opacity: 0 }}
+                   animate={{ scale: 1, opacity: 1 }}
+                   exit={{ scale: 0.95, opacity: 0 }}
+                   className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-155 flex flex-col"
+                 >
+                   {/* Modal Banner */}
+                   <div className="p-6 bg-gradient-to-r from-emerald-700 to-teal-600 text-white flex justify-between items-start">
+                     <div className="space-y-1">
+                       <div className="flex items-center gap-2">
+                         <Droplets className="w-5 h-5 text-emerald-300" />
+                         <span className="text-xs uppercase font-extrabold tracking-wider opacity-85">Kostenloses Konto</span>
+                       </div>
+                       <h3 className="text-2xl font-black">
+                         {isRegistering ? 'Registrieren' : 'Anmelden'}
+                       </h3>
+                       <p className="text-xs text-emerald-100 opacity-90">
+                         {isRegistering 
+                           ? 'Erstelle ein Konto, um deinen Bewässerungsplan zu sichern.' 
+                           : 'Melde dich an, um deine Pläne zu sichern und abzurufen.'}
+                       </p>
+                     </div>
+                     <button 
+                       onClick={() => {
+                         setIsPlannerAuthModalOpen(false);
+                         setAuthError("");
+                       }} 
+                       className="text-white hover:text-emerald-250 hover:text-emerald-200 p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+                     >
+                       <X className="w-5 h-5" />
+                     </button>
+                   </div>
+
+                   {/* Form body */}
+                   <form onSubmit={handlePlannerAuthSubmit} className="p-6 space-y-4">
+                     {authError && (
+                       <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold flex items-center gap-2">
+                         <AlertCircle className="w-4 h-4 shrink-0" />
+                         <span>{authError}</span>
+                       </div>
+                     )}
+
+                     {isRegistering ? (
+                       /* Registration fields */
+                       <div className="space-y-3">
+                         <div className="space-y-1">
+                           <label className="block text-xs font-bold text-gray-500 uppercase">Benutzername *</label>
+                           <input 
+                             type="text" 
+                             required
+                             value={regUsername} 
+                             onChange={(e) => setRegUsername(e.target.value)} 
+                             className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-gray-800"
+                             placeholder="z.B. gartenfreund"
+                           />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="block text-xs font-bold text-gray-500 uppercase">E-Mail-Adresse *</label>
+                           <input 
+                             type="email" 
+                             required
+                             value={regEmail} 
+                             onChange={(e) => setRegEmail(e.target.value)} 
+                             className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-gray-800"
+                             placeholder="deine@adresse.de"
+                           />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="block text-xs font-bold text-gray-500 uppercase">Vollständiger Name</label>
+                           <input 
+                             type="text" 
+                             value={regName} 
+                             onChange={(e) => setRegName(e.target.value)} 
+                             className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-gray-800"
+                             placeholder="z.B. Max Mustermann"
+                           />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="block text-xs font-bold text-gray-500 uppercase">Passwort *</label>
+                           <input 
+                             type="password" 
+                             required
+                             value={regPassword} 
+                             onChange={(e) => setRegPassword(e.target.value)} 
+                             className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-gray-800"
+                             placeholder="••••••••"
+                           />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="block text-xs font-bold text-gray-505 uppercase">Passwort wiederholen *</label>
+                           <input 
+                             type="password" 
+                             required
+                             value={regPasswordRepeat} 
+                             onChange={(e) => setRegPasswordRepeat(e.target.value)} 
+                             className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-gray-800"
+                             placeholder="••••••••"
+                           />
+                         </div>
+                       </div>
+                     ) : (
+                       /* Login fields */
+                       <div className="space-y-3">
+                         <div className="space-y-1">
+                           <label className="block text-xs font-bold text-gray-500 uppercase">Benutzername</label>
+                           <input 
+                             type="text" 
+                             required
+                             value={loginUsername} 
+                             onChange={(e) => setLoginUsername(e.target.value)} 
+                             className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-gray-800"
+                             placeholder="Dein Benutzername"
+                           />
+                         </div>
+                         <div className="space-y-1">
+                           <label className="block text-xs font-bold text-gray-500 uppercase">Passwort</label>
+                           <input 
+                             type="password" 
+                             required
+                             value={loginPassword} 
+                             onChange={(e) => setLoginPassword(e.target.value)} 
+                             className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-gray-800"
+                             placeholder="Dein Passwort"
+                           />
+                         </div>
+                       </div>
+                     )}
+
+                     <div className="pt-2 flex flex-col gap-3">
+                       <button 
+                         type="submit"
+                         className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition shadow-md hover:shadow-lg cursor-pointer text-sm"
+                       >
+                         {isRegistering ? 'Registrieren & Weiter' : 'Anmelden & Weiter'}
+                       </button>
+
+                       <button 
+                         type="button"
+                         onClick={() => {
+                           setIsRegistering(!isRegistering);
+                           setAuthError("");
+                         }}
+                         className="w-full text-center text-xs text-gray-500 hover:text-emerald-700 font-semibold cursor-pointer"
+                       >
+                         {isRegistering 
+                           ? 'Bereits registriert? Jetzt anmelden' 
+                           : 'Noch kein Konto? Jetzt registrieren'}
+                       </button>
+                     </div>
+                   </form>
+                 </motion.div>
+               </div>
+             )}
+           </AnimatePresence>
+      </>
     );
   }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col font-sans">
       <header className="bg-white shadow-sm sticky top-0 z-40 border-b border-gray-200 w-full">
-        <div className="max-w-[1400px] mx-auto px-4 py-4 flex items-center gap-4">
-          <button 
-            onClick={() => navigate('/')}
-            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
-          </button>
-          <div className="flex items-center gap-2">
-            <Droplets className="w-6 h-6 text-[#1388C9]" />
-            <span className="text-xl font-bold text-gray-900">Bewässerungsplaner</span>
+        <div className="max-w-[1400px] mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => navigate('/')}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5 text-gray-600" />
+            </button>
+            <div className="flex items-center gap-2">
+              <Droplets className="w-6 h-6 text-[#1388C9]" />
+              <span className="text-xl font-bold text-gray-900">Bewässerungsplaner</span>
+            </div>
+          </div>
+          
+          <div className="relative">
+            <button 
+              onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
+              className="flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white transition-colors cursor-pointer"
+            >
+              {currentUser ? (
+                <span className="text-sm font-bold uppercase">{currentUser.name[0]}</span>
+              ) : (
+                <User className="w-5 h-5" />
+              )}
+            </button>
+            
+            {isUserDropdownOpen && (
+              <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-2xl border border-gray-150 overflow-hidden z-20 p-4">
+                {currentUser ? (
+                  <div className="space-y-3 text-left">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Mein Konto</p>
+                    <div>
+                      <p className="text-sm font-bold text-gray-800">{currentUser.name}</p>
+                      <p className="text-xs text-gray-500">{currentUser.email}</p>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        setIsUserDropdownOpen(false);
+                        setIsSavedPlansModalOpen(true);
+                      }}
+                      className="w-full font-sans text-left flex items-center gap-2 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors font-medium cursor-pointer"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>Meine Pläne</span>
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        try {
+                          await signOut(auth);
+                        } catch(e) {}
+                        if (setCurrentUser) setCurrentUser(null);
+                        setIsUserDropdownOpen(false);
+                      }}
+                      className="w-full bg-red-50 text-red-600 text-xs font-bold py-2 rounded-lg hover:bg-red-100 transition-colors cursor-pointer font-semibold"
+                    >
+                      Abmelden
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3 text-left">
+                    <p className="text-xs text-gray-500">Du bist nicht angemeldet.</p>
+                    <button 
+                      onClick={() => {
+                        setIsUserDropdownOpen(false);
+                        setIsPlannerAuthModalOpen(true);
+                      }}
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 rounded-lg transition-colors cursor-pointer text-center"
+                    >
+                      Anmelden / Registrieren
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -1418,6 +2061,328 @@ export default function Planner({
           </div>
         </motion.div>
       </main>
+
+      {/* Save Plan Modal */}
+      <AnimatePresence>
+        {isSaveModalOpen && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans animate-in fade-in duration-200">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-150 p-6 space-y-4"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="w-6 h-6 text-emerald-600" />
+                <h3 className="text-lg font-bold text-gray-900">Plan speichern</h3>
+              </div>
+              
+              {saveSuccess ? (
+                <div className="py-6 text-center space-y-2">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <Check className="w-6 h-6" />
+                  </div>
+                  <h4 className="font-bold text-emerald-800">Plan erfolgreich gespeichert!</h4>
+                  <p className="text-gray-500 text-xs">Du kannst diesen Plan jederzeit über dein Profil aufrufen.</p>
+                </div>
+              ) : (
+                <form onSubmit={handlePlannerSaveConfirm} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-gray-500 uppercase">Name des Plans</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={savePlanName} 
+                      onChange={(e) => setSavePlanName(e.target.value)} 
+                      placeholder="z.B. Mein Vorgarten"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium text-gray-805 text-gray-800 text-sm"
+                    />
+                  </div>
+                  
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button 
+                      type="button"
+                      onClick={() => setIsSaveModalOpen(false)}
+                      className="px-4 py-2.5 bg-gray-105 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition cursor-pointer"
+                    >
+                      Abbrechen
+                    </button>
+                    <button 
+                      type="submit"
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition shadow-md cursor-pointer"
+                    >
+                      Speichern
+                    </button>
+                  </div>
+                </form>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Saved Plans Modal */}
+      <AnimatePresence>
+        {isSavedPlansModalOpen && currentUser && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-55 z-50 p-4 font-sans animate-in fade-in duration-200">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-150 flex flex-col max-h-[85vh]"
+            >
+              {/* Header */}
+              <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-emerald-600" />
+                  <h3 className="text-lg font-bold text-gray-900">Meine gespeicherten Pläne</h3>
+                </div>
+                <button 
+                  onClick={() => setIsSavedPlansModalOpen(false)}
+                  className="p-1.5 hover:bg-gray-200 text-gray-400 hover:text-gray-600 rounded-full transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 overflow-y-auto space-y-4 flex-1">
+                {onlinePlans.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500 text-sm mb-4">Du hast noch keine Bewässerungspläne gespeichert.</p>
+                    <button 
+                      onClick={() => {
+                        setIsSavedPlansModalOpen(false);
+                        setActiveStep('canvas');
+                      }}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition duration-150 shadow-md cursor-pointer inline-flex items-center gap-2"
+                    >
+                      Jetzt planen starten
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  onlinePlans.map((plan: any) => (
+                    <div key={plan.id} className="p-4 rounded-xl border border-gray-200 bg-white hover:border-emerald-500 hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="space-y-1 select-none text-left">
+                        <h4 className="font-bold text-gray-900 text-base">{plan.name}</h4>
+                        <p className="text-xs text-gray-400">Zuletzt bearbeitet: {plan.lastEdited}</p>
+                        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs font-semibold text-emerald-700">
+                          {plan.plannerData?.sprinklers !== undefined && (
+                            <span className="bg-emerald-50 px-2 py-0.5 rounded-md">
+                              Regner: {plan.plannerData.sprinklers}
+                            </span>
+                          )}
+                          {plan.plannerData?.zones !== undefined && (
+                            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md">
+                              Zonen: {plan.plannerData.zones}
+                            </span>
+                          )}
+                          {plan.plannerData?.gardenArea !== undefined && (
+                            <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md">
+                              Fläche: {plan.plannerData.gardenArea} m²
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button 
+                          onClick={() => {
+                            setIsSavedPlansModalOpen(false);
+                            if (plan.canvasState) {
+                              setPlannerData(plan.plannerData || null);
+                              setSavedCanvasState(plan.canvasState);
+                              setActiveStep('canvas');
+                            }
+                          }}
+                          className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition duration-200 cursor-pointer"
+                        >
+                          Plan laden
+                        </button>
+                        <button 
+                          onClick={async () => {
+                            if (confirm("Aufgepasst: Möchtest du diesen Plan wirklich löschen?")) {
+                              try {
+                                await deleteDoc(doc(db, 'plans', plan.id));
+                                setOnlinePlans(prev => prev.filter(p => p.id !== plan.id));
+                              } catch (err) {
+                                console.error('Error deleting plan:', err);
+                              }
+                            }
+                          }}
+                          className="p-2 border border-red-200 text-red-500 hover:bg-red-50 rounded-lg transition duration-200 cursor-pointer"
+                          title="Löschen"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Planner Registration & Login Auth Modal */}
+      <AnimatePresence>
+        {isPlannerAuthModalOpen && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans animate-in fade-in duration-200">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-155 flex flex-col"
+            >
+              {/* Modal Banner */}
+              <div className="p-6 bg-gradient-to-r from-emerald-700 to-teal-600 text-white flex justify-between items-start">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Droplets className="w-5 h-5 text-emerald-300" />
+                    <span className="text-xs uppercase font-extrabold tracking-wider opacity-85">Kostenloses Konto</span>
+                  </div>
+                  <h3 className="text-2xl font-black">
+                    {isRegistering ? 'Registrieren' : 'Anmelden'}
+                  </h3>
+                  <p className="text-xs text-emerald-100 opacity-90">
+                    {isRegistering 
+                      ? 'Erstelle ein Konto, um deinen Bewässerungsplan zu sichern.' 
+                      : 'Melde dich an, um deine Pläne zu sichern und abzurufen.'}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => {
+                    setIsPlannerAuthModalOpen(false);
+                    setAuthError("");
+                  }} 
+                  className="text-white hover:text-emerald-250 hover:text-emerald-200 p-1 rounded-full hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Form body */}
+              <form onSubmit={handlePlannerAuthSubmit} className="p-6 space-y-4">
+                {authError && (
+                  <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs font-semibold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{authError}</span>
+                  </div>
+                )}
+
+                {isRegistering ? (
+                  /* Registration fields */
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-gray-500 uppercase">Benutzername *</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={regUsername} 
+                        onChange={(e) => setRegUsername(e.target.value)} 
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-gray-800"
+                        placeholder="z.B. gartenfreund"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-gray-500 uppercase">E-Mail-Adresse *</label>
+                      <input 
+                        type="email" 
+                        required
+                        value={regEmail} 
+                        onChange={(e) => setRegEmail(e.target.value)} 
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-gray-800"
+                        placeholder="deine@adresse.de"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-gray-500 uppercase">Vollständiger Name</label>
+                      <input 
+                        type="text" 
+                        value={regName} 
+                        onChange={(e) => setRegName(e.target.value)} 
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-gray-800"
+                        placeholder="z.B. Max Mustermann"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-gray-500 uppercase">Passwort *</label>
+                      <input 
+                        type="password" 
+                        required
+                        value={regPassword} 
+                        onChange={(e) => setRegPassword(e.target.value)} 
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-gray-800"
+                        placeholder="••••••••"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-gray-505 uppercase">Passwort wiederholen *</label>
+                      <input 
+                        type="password" 
+                        required
+                        value={regPasswordRepeat} 
+                        onChange={(e) => setRegPasswordRepeat(e.target.value)} 
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-gray-800"
+                        placeholder="••••••••"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  /* Login fields */
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-gray-500 uppercase">Benutzername</label>
+                      <input 
+                        type="text" 
+                        required
+                        value={loginUsername} 
+                        onChange={(e) => setLoginUsername(e.target.value)} 
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-gray-800"
+                        placeholder="Dein Benutzername"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-xs font-bold text-gray-500 uppercase">Passwort</label>
+                      <input 
+                        type="password" 
+                        required
+                        value={loginPassword} 
+                        onChange={(e) => setLoginPassword(e.target.value)} 
+                        className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-gray-800"
+                        placeholder="Dein Passwort"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-2 flex flex-col gap-3">
+                  <button 
+                    type="submit"
+                    className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition shadow-md hover:shadow-lg cursor-pointer text-sm"
+                  >
+                    {isRegistering ? 'Registrieren & Weiter' : 'Anmelden & Weiter'}
+                  </button>
+
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setIsRegistering(!isRegistering);
+                      setAuthError("");
+                    }}
+                    className="w-full text-center text-xs text-gray-500 hover:text-emerald-700 font-semibold cursor-pointer"
+                  >
+                    {isRegistering 
+                      ? 'Bereits registriert? Jetzt anmelden' 
+                      : 'Noch kein Konto? Jetzt registrieren'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

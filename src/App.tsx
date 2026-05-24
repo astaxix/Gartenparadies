@@ -7,78 +7,160 @@ import Planner from './components/Planner';
 import BetaGate from './components/BetaGate';
 import { initialOrders, initialProducts, plannerProducts } from './data';
 import { CartItem, Product, Order } from './types';
+import { onAuthStateChanged } from 'firebase/auth';
+import { collection, doc, getDoc, getDocs, setDoc, query, where, onSnapshot } from 'firebase/firestore';
+import { auth, db, handleFirestoreError, OperationType } from './lib/firebase';
 
 function AppContent() {
   const [isCartOpen, setIsCartOpen] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false); // Can be replaced by real auth
+  const [isAdmin, setIsAdmin] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [products, setProducts] = useState<Product[]>(plannerProducts);
+  const [orders, setOrders] = useState<Order[]>([]);
+
+  // Monitor Auth Changes and sync User profile state online
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        const userDocRef = doc(db, 'users', user.uid);
+        let userData: any = null;
+        try {
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+            userData = userDoc.data();
+          } else {
+            userData = {
+              id: user.uid,
+              username: user.displayName || user.email?.split('@')[0] || 'Gartenfreund',
+              displayName: user.displayName || '',
+              email: user.email || ''
+            };
+            await setDoc(userDocRef, userData);
+          }
+        } catch (err) {
+          console.warn('User settings initialization skipped locally:', err);
+          userData = {
+            id: user.uid,
+            username: user.displayName || user.email?.split('@')[0] || 'Gartenfreund',
+            displayName: user.displayName || '',
+            email: user.email || ''
+          };
+        }
+        setCurrentUser(userData);
+        setIsAdmin(user.email === 'info@as-mietwagen-service.de');
+      } else {
+        setCurrentUser(null);
+        setIsAdmin(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Initialize from localStorage or use defaults
-  const [products, setProducts] = useState<Product[]>(() => {
-    const savedProducts = localStorage.getItem('gartenparadies_products');
-    let loadedProducts = initialProducts;
-    if (savedProducts) {
+  // Load products catalog from Firestore online
+  useEffect(() => {
+    async function loadProducts() {
       try {
-        loadedProducts = JSON.parse(savedProducts);
-      } catch (e) {
-        console.error('Failed to parse products from local storage', e);
+        const querySnapshot = await getDocs(collection(db, 'products'));
+        if (!querySnapshot.empty) {
+          const loadedProducts = querySnapshot.docs.map(doc => doc.data() as Product);
+          // If items are present, use them
+          setProducts(loadedProducts);
+        } else {
+          // Default seed fallback
+          setProducts(plannerProducts);
+        }
+      } catch (err) {
+        console.warn('Failed loading products from Firestore, utilizing catalog fallback:', err);
+        setProducts(plannerProducts);
       }
     }
-    
-    // Ensure all planner products exist and are fully updated
-    let needsUpdate = false;
-    const finalProducts = [...loadedProducts];
-    plannerProducts.forEach(pp => {
-       const existingIndex = finalProducts.findIndex(p => p.id === pp.id);
-       if (existingIndex === -1) {
-          finalProducts.push(pp);
-          needsUpdate = true;
-       } else {
-          // If plannerType is missing or outdated, update it in-place
-          const existing = finalProducts[existingIndex];
-          if (!existing.plannerType || existing.plannerType !== pp.plannerType || existing.plannerStations !== pp.plannerStations) {
-             finalProducts[existingIndex] = { ...existing, ...pp };
-             needsUpdate = true;
+    loadProducts();
+  }, []);
+
+  // Update Products & push to Firestore
+  const handleUpdateProducts = async (newProducts: Product[]) => {
+    setProducts(newProducts);
+    for (const prod of newProducts) {
+      try {
+        const prodRef = doc(db, 'products', prod.id);
+        await setDoc(prodRef, prod);
+      } catch (error) {
+        console.error('Failed writing products to store:', error);
+      }
+    }
+  };
+
+  const [categories, setCategories] = useState<string[]>(['Pflanzen', 'Bodengrund', 'Technik', 'Pflege', 'Futter', 'Planer Artikel']);
+
+  // Load user shopping cart from Firestore on login
+  useEffect(() => {
+    if (!currentUser) {
+      setCartItems([]);
+      return;
+    }
+
+    async function loadCart() {
+      try {
+        const cartDoc = await getDoc(doc(db, 'carts', currentUser.id));
+        if (cartDoc.exists()) {
+          const cartData = cartDoc.data();
+          if (cartData.items) {
+            setCartItems(cartData.items);
           }
-       }
-    });
-    
-    if (needsUpdate) {
-       localStorage.setItem('gartenparadies_products', JSON.stringify(finalProducts));
-    }
-    return finalProducts;
-  });
-  
-  const [categories, setCategories] = useState<string[]>(() => {
-    const savedCategories = localStorage.getItem('gartenparadies_categories');
-    let loadedCategories = ['Pflanzen', 'Bodengrund', 'Technik', 'Pflege', 'Futter'];
-    if (savedCategories) {
-      try {
-        loadedCategories = JSON.parse(savedCategories);
-      } catch (e) {
-        console.error('Failed to parse categories from local storage', e);
+        }
+      } catch (err) {
+        console.error('Error loading cart from Firestore:', err);
       }
     }
-    if (!loadedCategories.includes('Planer Artikel')) {
-       loadedCategories.push('Planer Artikel');
-       localStorage.setItem('gartenparadies_categories', JSON.stringify(loadedCategories));
+    loadCart();
+  }, [currentUser]);
+
+  // Save/Sync cart to Firestore online (using debounced timeout)
+  useEffect(() => {
+    if (!currentUser || cartItems.length === 0) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        await setDoc(doc(db, 'carts', currentUser.id), {
+          userId: currentUser.id,
+          items: cartItems,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error('Error saving cart to Firestore:', err);
+      }
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [cartItems, currentUser]);
+
+  // Load orders dynamically and in real time (Admin sees all, Standard User sees self)
+  useEffect(() => {
+    if (!currentUser) {
+      setOrders([]);
+      return;
     }
-    return loadedCategories;
-  });
-  
-  const [orders, setOrders] = useState<Order[]>(initialOrders);
 
-  // Save to localStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('gartenparadies_products', JSON.stringify(products));
-  }, [products]);
+    const ordersCol = collection(db, 'orders');
+    const isUserAdmin = currentUser.email === 'info@as-mietwagen-service.de';
+    const ordersQuery = isUserAdmin 
+      ? query(ordersCol) 
+      : query(ordersCol, where('userId', '==', currentUser.id));
 
-  useEffect(() => {
-    localStorage.setItem('gartenparadies_categories', JSON.stringify(categories));
-  }, [categories]);
+    const unsubscribe = onSnapshot(ordersQuery, (snapshot) => {
+      const loadedOrders = snapshot.docs.map(doc => doc.data() as Order);
+      loadedOrders.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setOrders(loadedOrders);
+    }, (error) => {
+      console.error('Failed querying and syncing orders:', error);
+    });
+
+    return () => unsubscribe();
+  }, [currentUser]);
 
   // Derived state
   const cartItemCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
@@ -162,6 +244,21 @@ function AppContent() {
     setCartItems(prev => prev.filter((_, index) => index !== itemIndex));
   };
 
+  const handleClearCart = async () => {
+    setCartItems([]);
+    if (currentUser) {
+      try {
+        await setDoc(doc(db, 'carts', currentUser.id), {
+          userId: currentUser.id,
+          items: [],
+          updatedAt: new Date().toISOString()
+        });
+      } catch (err) {
+        console.error('Error clearing cart in Firestore:', err);
+      }
+    }
+  };
+
   return (
     <>
       <Routes>
@@ -172,7 +269,7 @@ function AppContent() {
               categories={categories}
               orders={orders}
               onExitAdmin={() => navigate('/')}
-              onUpdateProducts={setProducts}
+              onUpdateProducts={handleUpdateProducts}
               onUpdateCategories={setCategories}
             />
           ) : (
@@ -207,6 +304,8 @@ function AppContent() {
             onAddToCart={handleAddToCart}
             onOpenCart={() => setIsCartOpen(true)}
             cartItems={cartItems}
+            currentUser={currentUser}
+            setCurrentUser={setCurrentUser}
           />
         } />
 
@@ -220,6 +319,8 @@ function AppContent() {
             onNavigateToAdmin={() => navigate('/admin')}
             isAdmin={isAdmin}
             setIsAdmin={setIsAdmin}
+            currentUser={currentUser}
+            setCurrentUser={setCurrentUser}
           />
         } />
         <Route path="*" element={<Navigate to="/" replace />} />
@@ -232,6 +333,8 @@ function AppContent() {
         items={cartItems}
         onUpdateQuantity={handleUpdateCartQuantity}
         onRemoveItem={handleRemoveFromCart}
+        currentUser={currentUser}
+        onClearCart={handleClearCart}
       />
     </>
   );

@@ -1,0 +1,112 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default catch-all denies access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'google.com');
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'info@as-mietwagen-service.de' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 3 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Validation Functions
+    function isValidProduct(data) {
+      return data.keys().hasAll(['id', 'name', 'price', 'category'])
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 256
+        && (data.price is int || data.price is float) && data.price >= 0
+        && data.category is string && data.category.size() <= 128;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'username', 'email'])
+        && data.id is string && data.id == request.auth.uid
+        && data.username is string && data.username.size() >= 3 && data.username.size() <= 64
+        && data.email is string && data.email.size() <= 128;
+    }
+
+    function isValidPlan(data) {
+      return data.keys().hasAll(['id', 'userId', 'name'])
+        && data.id is string
+        && data.userId is string && data.userId == request.auth.uid
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 256;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['id', 'customerName', 'total', 'status', 'items'])
+        && data.id is string
+        && data.customerName is string && data.customerName.size() <= 256
+        && (data.total is int || data.total is float)
+        && data.status is string
+        && data.items is list;
+    }
+
+    function isValidCart(data) {
+      return data.keys().hasAll(['userId', 'items'])
+        && data.userId is string && data.userId == request.auth.uid
+        && data.items is list;
+    }
+
+    // Match Rules
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isVerifiedUser() && isAdmin() && isValidProduct(incoming());
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow create: if isVerifiedUser() && request.auth.uid == userId && isValidUser(incoming());
+      allow update: if isVerifiedUser() && request.auth.uid == userId && isValidUser(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['username', 'displayName']);
+    }
+
+    match /plans/{planId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(planId) && isValidPlan(incoming()) && incoming().userId == request.auth.uid;
+      allow update: if isVerifiedUser() && isValidId(planId) && isValidPlan(incoming())
+        && existing().userId == request.auth.uid
+        && incoming().userId == existing().userId
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'plannerData', 'canvasState', 'lastEdited']);
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
+    }
+
+    match /orders/{orderId} {
+      allow get: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isVerifiedUser() && isValidId(orderId) && isValidOrder(incoming()) && incoming().userId == request.auth.uid;
+      allow update: if isVerifiedUser() && isAdmin();
+    }
+
+    match /carts/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow write: if isVerifiedUser() && request.auth.uid == userId && isValidCart(incoming());
+    }
+  }
+}

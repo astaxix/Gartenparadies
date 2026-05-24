@@ -1,7 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { ShoppingCart, Search, Menu, Leaf, Droplets, ArrowRight, PackageOpen, User, X, ChevronRight, Check, Plus, Minus, Download, FileText } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { ShoppingCart, Search, Menu, Leaf, Droplets, ArrowRight, PackageOpen, User, X, ChevronRight, Check, Plus, Minus, Download, FileText, Trash2 } from 'lucide-react';
 import { Product } from '../types';
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  signOut,
+  signInWithPopup
+} from 'firebase/auth';
+import { db, auth, loginWithGoogle } from '../lib/firebase';
+import { doc, getDocs, setDoc, deleteDoc, collection, query, where } from 'firebase/firestore';
 
 interface ShopFrontProps {
   products: Product[];
@@ -12,20 +20,61 @@ interface ShopFrontProps {
   onNavigateToAdmin: () => void;
   isAdmin: boolean;
   setIsAdmin: React.Dispatch<React.SetStateAction<boolean>>;
+  currentUser?: any;
+  setCurrentUser?: (user: any) => void;
 }
 
-export default function ShopFront({ products, categories, onAddToCart, cartItemCount, onOpenCart, onNavigateToAdmin, isAdmin, setIsAdmin }: ShopFrontProps) {
+export default function ShopFront({ 
+  products, 
+  categories, 
+  onAddToCart, 
+  cartItemCount, 
+  onOpenCart, 
+  onNavigateToAdmin, 
+  isAdmin, 
+  setIsAdmin,
+  currentUser,
+  setCurrentUser 
+}: ShopFrontProps) {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isCategoryMenuOpen, setIsCategoryMenuOpen] = useState(false);
+  
+  // Registration and account states
+  const [isSavedPlansModalOpen, setIsSavedPlansModalOpen] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [regUsername, setRegUsername] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regPasswordRepeat, setRegPasswordRepeat] = useState('');
+  const [regName, setRegName] = useState('');
+
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedVariations, setSelectedVariations] = useState<Record<string, string>>({});
   const [selectedQuantity, setSelectedQuantity] = useState(1);
+  const [onlinePlans, setOnlinePlans] = useState<any[]>([]);
+  const [loginSpinner, setLoginSpinner] = useState(false);
+
+  useEffect(() => {
+    if (!currentUser || !isSavedPlansModalOpen) return;
+
+    async function fetchPlans() {
+      try {
+        const q = query(collection(db, 'plans'), where('userId', '==', currentUser.id));
+        const s = await getDocs(q);
+        const loaded = s.docs.map(doc => doc.data());
+        setOnlinePlans(loaded);
+      } catch (err) {
+        console.error('Failed fetching plans from Firestore:', err);
+      }
+    }
+    fetchPlans();
+  }, [currentUser, isSavedPlansModalOpen]);
 
   useEffect(() => {
     if (selectedProduct && selectedProduct.variations) {
@@ -118,16 +167,93 @@ export default function ShopFront({ products, categories, onAddToCart, cartItemC
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (loginUsername === 'admin' && loginPassword === 'admin') {
       setIsAdmin(true);
+      if (setCurrentUser) {
+        setCurrentUser(null);
+      }
       setIsUserDropdownOpen(false);
       setLoginError('');
       setLoginUsername('');
       setLoginPassword('');
-    } else {
-      setLoginError('Benutzername oder Passwort falsch.');
+      return;
+    }
+    
+    // Normal user login via Firebase Auth
+    const signinEmail = loginUsername.includes('@') ? loginUsername : `${loginUsername}@gartenparadies.com`;
+    try {
+      setLoginSpinner(true);
+      const userCredential = await signInWithEmailAndPassword(auth, signinEmail, loginPassword);
+      setIsAdmin(userCredential.user.email === 'info@as-mietwagen-service.de');
+      setIsUserDropdownOpen(false);
+      setLoginError('');
+      setLoginUsername('');
+      setLoginPassword('');
+    } catch (err: any) {
+      console.error(err);
+      let errorMsg = 'Anmeldung fehlerhaft. Bitte überprüfen Sie Name und Passwort.';
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        errorMsg = 'E-Mail/Benutzername oder Passwort falsch.';
+      }
+      setLoginError(errorMsg);
+    } finally {
+      setLoginSpinner(false);
+    }
+  };
+
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    if (!regUsername || !regEmail || !regPassword) {
+      setLoginError('Bitte fülle alle Pflichtfelder aus.');
+      return;
+    }
+    if (regPassword !== regPasswordRepeat) {
+      setLoginError('Die Passwörter stimmen nicht überein.');
+      return;
+    }
+
+    try {
+      setLoginSpinner(true);
+      const userCredential = await createUserWithEmailAndPassword(auth, regEmail, regPassword);
+      const user = userCredential.user;
+      
+      // Save profile info in Firestore/users
+      const userDocRef = doc(db, 'users', user.uid);
+      const userData = {
+        id: user.uid,
+        username: regUsername,
+        displayName: regName || regUsername,
+        email: regEmail
+      };
+      await setDoc(userDocRef, userData);
+
+      if (setCurrentUser) {
+        setCurrentUser(userData);
+      }
+
+      setIsAdmin(user.email === 'info@as-mietwagen-service.de');
+      setIsRegistering(false);
+      setIsUserDropdownOpen(false);
+      setRegUsername('');
+      setRegEmail('');
+      setRegPassword('');
+      setRegPasswordRepeat('');
+      setRegName('');
+      setLoginError('');
+    } catch (err: any) {
+      console.error(err);
+      let errorMsg = 'Registrierung fehlgeschlagen.';
+      if (err.code === 'auth/email-already-in-use') {
+        errorMsg = 'Diese E-Mail-Adresse wird bereits verwendet.';
+      } else if (err.code === 'auth/weak-password') {
+        errorMsg = 'Das Passwort ist zu schwach (mind. 6 Zeichen).';
+      }
+      setLoginError(errorMsg);
+    } finally {
+      setLoginSpinner(false);
     }
   };
 
@@ -302,23 +428,122 @@ export default function ShopFront({ products, categories, onAddToCart, cartItemC
                 <div className="absolute right-0 top-full mt-2 w-64 sm:w-72 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
                   <div className="p-3 sm:p-4 border-b border-gray-100 bg-gray-50/50">
                     <h3 className="font-bold text-gray-900 text-sm sm:text-base">
-                      {isAdmin ? 'Mein Konto' : 'Anmelden'}
+                      {currentUser ? 'Mein Profil' : isAdmin ? 'Administrator' : isRegistering ? 'Registrieren' : 'Anmelden'}
                     </h3>
                   </div>
                   <div className="p-3 sm:p-4">
-                    {isAdmin ? (
-                      <div className="space-y-4">
-                        <p className="text-sm text-gray-600">Angemeldet als Administrator</p>
+                    {currentUser ? (
+                      <div className="space-y-3">
+                        <div className="pb-2 border-b border-gray-100">
+                          <p className="text-sm font-bold text-gray-850 text-gray-800 font-sans">Hallo, {currentUser.name}!</p>
+                          <p className="text-xs text-gray-500 font-sans">{currentUser.email}</p>
+                        </div>
                         <button 
                           onClick={() => {
-                            setIsAdmin(false);
+                            setIsUserDropdownOpen(false);
+                            setIsSavedPlansModalOpen(true);
+                          }}
+                          className="w-full font-sans text-left flex items-center gap-2 px-3 py-2 text-sm text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 rounded-lg transition-colors cursor-pointer font-semibold"
+                        >
+                          <FileText className="w-4 h-4 text-emerald-600" />
+                          <span>Meine Pläne</span>
+                        </button>
+                        <button 
+                          onClick={async () => {
+                            await signOut(auth);
                             setIsUserDropdownOpen(false);
                           }}
-                          className="w-full bg-red-50 text-red-600 text-sm sm:text-base font-medium py-2 rounded-lg hover:bg-red-100 transition-colors"
+                          className="w-full bg-red-50 text-red-600 text-sm font-semibold py-2 rounded-lg hover:bg-red-100 transition-colors font-sans cursor-pointer"
                         >
                           Abmelden
                         </button>
                       </div>
+                    ) : isAdmin ? (
+                      <div className="space-y-4 text-left p-1 select-none">
+                        <p className="text-xs text-slate-500 font-medium">Angemeldet als</p>
+                        <p className="text-sm font-bold text-slate-900 border-b pb-2 mb-2 break-all">info@as-mietwagen-service.de</p>
+                        <button 
+                          onClick={async () => {
+                            await signOut(auth);
+                            setIsUserDropdownOpen(false);
+                          }}
+                          className="w-full bg-red-50 text-red-600 text-sm font-semibold py-2 rounded-lg hover:bg-red-100 transition-colors font-sans cursor-pointer"
+                        >
+                          Abmelden
+                        </button>
+                      </div>
+                    ) : isRegistering ? (
+                      <form onSubmit={handleRegisterSubmit} className="space-y-3 text-sm">
+                        {loginError && (
+                          <div className="bg-red-50 text-red-600 text-xs p-2 rounded border border-red-100">
+                            {loginError}
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">Benutzername *</label>
+                          <input 
+                            type="text" 
+                            className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+                            value={regUsername}
+                            onChange={(e) => setRegUsername(e.target.value)}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">E-Mail *</label>
+                          <input 
+                            type="email" 
+                            className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+                            value={regEmail}
+                            onChange={(e) => setRegEmail(e.target.value)}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">Passwort *</label>
+                          <input 
+                            type="password" 
+                            className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+                            value={regPassword}
+                            onChange={(e) => setRegPassword(e.target.value)}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">Passwort wiederholen *</label>
+                          <input 
+                            type="password" 
+                            className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+                            value={regPasswordRepeat}
+                            onChange={(e) => setRegPasswordRepeat(e.target.value)}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-semibold text-gray-700 mb-1">Anzeigename (optional)</label>
+                          <input 
+                            type="text" 
+                            className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all"
+                            value={regName}
+                            onChange={(e) => setRegName(e.target.value)}
+                          />
+                        </div>
+                        <button 
+                          type="submit"
+                          className="w-full bg-emerald-600 text-white font-bold py-2 rounded-lg hover:bg-emerald-700 transition-colors cursor-pointer text-xs"
+                        >
+                          Registrieren
+                        </button>
+                        <div className="text-center pt-2 border-t border-gray-100">
+                          <button 
+                            type="button" 
+                            onClick={() => { setIsRegistering(false); setLoginError(""); }} 
+                            className="text-xs font-bold text-emerald-600 hover:underline"
+                          >
+                            Zurück zum Login
+                          </button>
+                        </div>
+                      </form>
                     ) : (
                       <form onSubmit={handleLogin} className="space-y-3 sm:space-y-4 text-sm sm:text-base">
                         {loginError && (
@@ -348,13 +573,51 @@ export default function ShopFront({ products, categories, onAddToCart, cartItemC
                         </div>
                         <button 
                           type="submit"
-                          className="w-full bg-emerald-600 text-white font-medium py-2 rounded-lg hover:bg-emerald-700 transition-colors"
+                          disabled={loginSpinner}
+                          className="w-full bg-emerald-600 text-white font-medium py-2 rounded-lg hover:bg-emerald-700 transition-colors cursor-pointer disabled:opacity-50"
                         >
-                          Einloggen
+                          {loginSpinner ? "Wird eingeloggt..." : "Einloggen"}
                         </button>
-                        <div className="text-center pt-2 border-t border-gray-100">
+
+                        <div className="flex items-center my-3">
+                          <div className="flex-1 border-t border-gray-200"></div>
+                          <span className="px-2 text-xs text-gray-400">ODER</span>
+                          <div className="flex-1 border-t border-gray-200"></div>
+                        </div>
+
+                        <button 
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              setLoginSpinner(true);
+                              await loginWithGoogle();
+                              setIsUserDropdownOpen(false);
+                            } catch (error) {
+                              setLoginError("Google Anmeldung fehlgeschlagen.");
+                            } finally {
+                              setLoginSpinner(false);
+                            }
+                          }}
+                          className="w-full flex items-center justify-center gap-2 bg-white border border-gray-300 rounded-lg py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors font-sans cursor-pointer animate-none"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24">
+                            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.9h6.6c-.28 1.5-1.11 2.76-2.39 3.63v3.02h3.86c2.26-2.08 3.67-5.14 3.67-8.48z"/>
+                            <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.86-3.02c-1.08.72-2.45 1.16-4.07 1.16-3.13 0-5.78-2.11-6.73-4.96H1.34v3.12C3.32 22.01 7.41 24 12 24z"/>
+                            <path fill="#FBBC05" d="M5.27 14.27a7.2 7.2 0 010-4.54V6.61H1.34a11.94 11.94 0 000 10.78l3.93-3.12z"/>
+                            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.93 1.19 15.22 0 12 0 7.41 0 3.32 1.99 1.34 5.61l3.93 3.12c.95-2.85 3.6-4.98 6.73-4.98z"/>
+                          </svg>
+                          <span>Mit Google anmelden</span>
+                        </button>
+
+                        <div className="text-center pt-2 border-t border-gray-100 mt-2">
                           <p className="text-xs text-gray-500">Noch kein Konto?</p>
-                          <button type="button" className="text-xs sm:text-sm font-medium text-emerald-600 hover:underline mt-1">Jetzt registrieren</button>
+                          <button 
+                            type="button" 
+                            onClick={() => { setIsRegistering(true); setLoginError(""); }} 
+                            className="text-xs sm:text-sm font-medium text-emerald-600 hover:underline mt-1 cursor-pointer"
+                          >
+                            Jetzt registrieren
+                          </button>
                         </div>
                       </form>
                     )}
@@ -430,8 +693,8 @@ export default function ShopFront({ products, categories, onAddToCart, cartItemC
       <section className="relative bg-emerald-900 text-white overflow-hidden py-32 lg:py-48">
         <div className="absolute inset-0 opacity-40 mix-blend-overlay">
           <img 
-            src="https://images.unsplash.com/photo-1522069169874-c58ec4b76be5?auto=format&fit=crop&q=80&w=2000" 
-            alt="Aquarium background" 
+            src="https://images.unsplash.com/photo-1558449028-b53a39d100fc?auto=format&fit=crop&q=80&w=2000" 
+            alt="Garden background" 
             className="w-full h-full object-cover"
           />
         </div>
@@ -841,6 +1104,106 @@ export default function ShopFront({ products, categories, onAddToCart, cartItemC
           </motion.div>
         </div>
       )}
+
+      {/* Saved Plans Modal */}
+      <AnimatePresence>
+        {isSavedPlansModalOpen && currentUser && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans animate-in fade-in duration-200">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-gray-150 flex flex-col max-h-[85vh]"
+            >
+              {/* Header */}
+              <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-emerald-600" />
+                  <h3 className="text-lg font-bold text-gray-900">Meine gespeicherten Pläne</h3>
+                </div>
+                <button 
+                  onClick={() => setIsSavedPlansModalOpen(false)}
+                  className="p-1.5 hover:bg-gray-200 text-gray-400 hover:text-gray-600 rounded-full transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-6 overflow-y-auto space-y-4 flex-1">
+                {onlinePlans.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-gray-500 text-sm mb-4">Du hast noch keine Bewässerungspläne gespeichert.</p>
+                    <button 
+                      onClick={() => {
+                        setIsSavedPlansModalOpen(false);
+                        window.location.href = '/planer';
+                      }}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition duration-150 shadow-md cursor-pointer inline-flex items-center gap-2"
+                    >
+                      Jetzt planen starten
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  onlinePlans.map((plan: any) => (
+                    <div key={plan.id} className="p-4 rounded-xl border border-gray-200 bg-white hover:border-emerald-500 hover:shadow-md transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="space-y-1 select-none text-left">
+                        <h4 className="font-bold text-gray-900 text-base">{plan.name}</h4>
+                        <p className="text-xs text-gray-400">Zuletzt bearbeitet: {plan.lastEdited}</p>
+                        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs font-semibold text-emerald-700">
+                          {plan.plannerData?.sprinklers !== undefined && (
+                            <span className="bg-emerald-50 px-2 py-0.5 rounded-md">
+                              Regner: {plan.plannerData.sprinklers}
+                            </span>
+                          )}
+                          {plan.plannerData?.zones !== undefined && (
+                            <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md">
+                              Zonen: {plan.plannerData.zones}
+                            </span>
+                          )}
+                          {plan.plannerData?.gardenArea !== undefined && (
+                            <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md">
+                              Fläche: {plan.plannerData.gardenArea} m²
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button 
+                          onClick={() => {
+                            setIsSavedPlansModalOpen(false);
+                            window.location.href = `/planer?load_plan=${plan.id}`;
+                          }}
+                          className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition duration-200 cursor-pointer"
+                        >
+                          Plan laden
+                        </button>
+                        <button 
+                          onClick={async () => {
+                            if (confirm("Aufgepasst: Möchtest du diesen Plan wirklich löschen?")) {
+                              try {
+                                await deleteDoc(doc(db, 'plans', plan.id));
+                                setOnlinePlans(prev => prev.filter(p => p.id !== plan.id));
+                              } catch (err) {
+                                console.error('Error deleting plan:', err);
+                              }
+                            }
+                          }}
+                          className="p-2 border border-red-200 text-red-500 hover:bg-red-50 rounded-lg transition duration-200 cursor-pointer animate-none"
+                          title="Löschen"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

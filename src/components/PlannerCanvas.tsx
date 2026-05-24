@@ -408,10 +408,13 @@ export type PlannerData = {
 
 interface PlannerCanvasProps {
   onBack: () => void;
-  onNext?: (data: PlannerData) => void;
+  onNext?: (data: PlannerData, rawState?: any) => void;
+  initialState?: any;
+  currentUser?: any;
+  setCurrentUser?: (user: any) => void;
 }
 
-export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
+export default function PlannerCanvas({ onBack, onNext, initialState, currentUser, setCurrentUser }: PlannerCanvasProps) {
   const [step, setStep] = useState<PlannerStep>('start_choice');
 
   const [scale, setScale] = useState(1);
@@ -456,6 +459,26 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
 
   const [sprinklers, setSprinklers] = useState<any[]>([]);
   const [pipes, setPipes] = useState<{points: Point[], color: string, id?: string}[]>([]);
+
+  // Restore plan effect inside PlannerCanvas
+  useEffect(() => {
+    if (initialState) {
+      if (initialState.shapes) setShapes(initialState.shapes);
+      if (initialState.sprinklers) setSprinklers(initialState.sprinklers);
+      if (initialState.pipes) setPipes(initialState.pipes);
+      if (initialState.infraNodes) setInfraNodes(initialState.infraNodes);
+      if (initialState.manualPipes) setManualPipes(initialState.manualPipes);
+      if (initialState.manualDripLines) setManualDripLines(initialState.manualDripLines);
+      if (initialState.manualRzws) setManualRzws(initialState.manualRzws);
+      if (initialState.bgImage) setBgImage(initialState.bgImage);
+      if (initialState.elevationDiff !== undefined) setElevationDiff(initialState.elevationDiff);
+      if (initialState.inletPressure !== undefined) setInletPressure(initialState.inletPressure);
+      if (initialState.extraBends !== undefined) setExtraBends(initialState.extraBends);
+      if (initialState.step) setStep(initialState.step);
+      if (initialState.scale) setScale(initialState.scale);
+      if (initialState.pan) setPan(initialState.pan);
+    }
+  }, [initialState]);
 
   const handleUpdateSprinklerModel = (modelId: string) => {
     if (selectedSprinklerIdx === null || !sprinklers[selectedSprinklerIdx]) return;
@@ -1618,6 +1641,21 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
           }
           return clone.outerHTML;
        })()
+    }, {
+       shapes,
+       sprinklers,
+       pipes,
+       infraNodes,
+       manualPipes,
+       manualDripLines,
+       manualRzws,
+       bgImage,
+       elevationDiff,
+       inletPressure,
+       extraBends,
+       step,
+       scale,
+       pan
     });
   };
 
@@ -2120,8 +2158,8 @@ export default function PlannerCanvas({ onBack, onNext }: PlannerCanvasProps) {
               <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
             <div className="overflow-hidden">
-              <h1 className="font-bold text-xs sm:text-sm md:text-base text-gray-950 leading-tight truncate">SmartGarden Bewässerung</h1>
-              <p className="hidden sm:block text-[10px] md:text-xs text-slate-500 font-medium truncate">
+              <h1 className="font-black text-sm sm:text-base md:text-xl text-emerald-700 tracking-tight leading-none truncate">Bewässerungsplaner</h1>
+              <p className="hidden sm:block text-[10px] md:text-xs text-slate-500 font-medium truncate mt-0.5">
                 {step === 'start_choice' && "Schritt 1: Startweise wählen"}
                 {step === 'draw' && "Schritt 2: Handzeichnung oder Plan-Nachzeichnung"}
                 {step === 'planning_choice' && "Schritt 3: Planungsmethode wählen"}
