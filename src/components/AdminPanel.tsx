@@ -1,10 +1,11 @@
 import { motion } from 'motion/react';
-import { LayoutDashboard, ShoppingBag, Users, Settings, Tag, FolderTree, LogOut, Search, Bell, Menu, FileText, Package } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Users, Settings, Tag, FolderTree, LogOut, Search, Bell, Menu, FileText, Package, Database } from 'lucide-react';
 import { Order, Product, CategoryNode } from '../types';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom';
 import ArticlesTab from './admin/ArticlesTab';
 import CategoriesTab from './admin/CategoriesTab';
+import BackupTab from './admin/BackupTab';
 
 interface AdminResponsiveProps {
   products: Product[];
@@ -29,6 +30,7 @@ export default function AdminPanel({ products, categories, orders, onExitAdmin, 
   else if (currentPath.includes('/admin/bestellungen')) activeTab = 'orders';
   else if (currentPath.includes('/admin/lager')) activeTab = 'inventory';
   else if (currentPath.includes('/admin/rechnungen')) activeTab = 'invoices';
+  else if (currentPath.includes('/admin/backup')) activeTab = 'backup';
 
   const totalRevenue = orders.reduce((acc, order) => acc + order.total, 0);
 
@@ -80,6 +82,9 @@ export default function AdminPanel({ products, categories, orders, onExitAdmin, 
           </button>
           <button className="flex items-center gap-3 px-3 py-2 hover:bg-gray-800 hover:text-white rounded-md transition-colors w-full text-left">
             <Settings className="w-5 h-5" /> Shop-Einstellungen
+          </button>
+          <button onClick={() => handleTabClick('backup', '/admin/backup')} className={getTabClass('backup')}>
+            <Database className="w-5 h-5" /> Backup & Cloud
           </button>
         </nav>
 
@@ -242,6 +247,15 @@ export default function AdminPanel({ products, categories, orders, onExitAdmin, 
               <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 text-center text-gray-500">
                 <h2>Rechnungen (In Entwicklung)</h2>
               </div>
+            } />
+
+            <Route path="backup" element={
+              <BackupTab 
+                products={products} 
+                categories={categories} 
+                onUpdateProducts={onUpdateProducts} 
+                onUpdateCategories={onUpdateCategories} 
+              />
             } />
 
             <Route path="*" element={<Navigate to="dashboard" replace />} />

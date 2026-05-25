@@ -715,12 +715,16 @@ export default function Planner({
     if (reducePressureActive) {
        const exists = defaultList.some(r => r.id === 'planner-pressure-reducer');
        if (!exists) {
-          const p = findPlannerItem('pressure_reducer', 'Premium Druckminderer 1" (Empfohlen bei hohem Druck)');
+          const pressureItem = products.find(p => p.plannerType === 'pressure_reducer');
+          const pName = pressureItem ? pressureItem.name : 'Premium Druckminderer 1" (Empfohlen bei hohem Druck)';
+          const pPrice = pressureItem ? pressureItem.price : 34.90;
+          const pArtNum = pressureItem ? pressureItem.articleNumber : 'PL-PR-01';
+          
           defaultList.unshift({
              id: 'planner-pressure-reducer',
-             name: p.name || 'Premium Druckminderer 1" (Empfohlen bei hohem Druck)',
-             price: p.price > 0 ? p.price : 34.90,
-             articleNumber: p.articleNumber || 'PL-PR-01',
+             name: pName,
+             price: pPrice,
+             articleNumber: pArtNum,
              category: 'Planer Artikel',
              quantity: 1,
              unit: 'Stk',

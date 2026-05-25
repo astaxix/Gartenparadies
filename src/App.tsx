@@ -8,9 +8,9 @@ import RegisterPage from './components/RegisterPage';
 import UserDashboard from './components/UserDashboard';
 import LegalPage from './components/LegalPage';
 import { initialOrders, initialProducts, plannerProducts } from './data';
-import { CartItem, Product, Order } from './types';
+import { CartItem, Product, Order, CategoryNode } from './types';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, setDoc, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, onSnapshot } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './lib/firebase';
 
 function AppContent() {
@@ -113,13 +113,18 @@ function AppContent() {
   // Update Products & push to Firestore
   const handleUpdateProducts = async (newProducts: Product[]) => {
     setProducts(newProducts);
-    for (const prod of newProducts) {
-      try {
-        const prodRef = doc(db, 'products', prod.id);
-        await setDoc(prodRef, prod);
-      } catch (error) {
-        console.error('Failed writing products to store:', error);
+    try {
+      const existingDocs = await getDocs(collection(db, 'products'));
+      for (const docSnap of existingDocs.docs) {
+        if (!newProducts.find(p => p.id === docSnap.id)) {
+          await deleteDoc(doc(db, 'products', docSnap.id));
+        }
       }
+      for (const prod of newProducts) {
+        await setDoc(doc(db, 'products', prod.id), prod);
+      }
+    } catch (error) {
+      console.error('Failed syncing products to store:', error);
     }
   };
 
