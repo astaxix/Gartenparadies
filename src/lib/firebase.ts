@@ -5,6 +5,8 @@ import localFirebaseConfig from '../../firebase-applet-config.json';
 
 const metaEnv = (import.meta as any).env || {};
 
+const resolvedDatabaseId = metaEnv.VITE_FIREBASE_DATABASE_ID || localFirebaseConfig.firestoreDatabaseId;
+
 const firebaseConfig = {
   apiKey: metaEnv.VITE_FIREBASE_API_KEY || localFirebaseConfig.apiKey,
   authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN || localFirebaseConfig.authDomain,
@@ -12,11 +14,13 @@ const firebaseConfig = {
   storageBucket: metaEnv.VITE_FIREBASE_STORAGE_BUCKET || localFirebaseConfig.storageBucket,
   messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || localFirebaseConfig.messagingSenderId,
   appId: metaEnv.VITE_FIREBASE_APP_ID || localFirebaseConfig.appId,
-  firestoreDatabaseId: metaEnv.VITE_FIREBASE_DATABASE_ID || localFirebaseConfig.firestoreDatabaseId || 'default',
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = resolvedDatabaseId && resolvedDatabaseId !== 'default' && resolvedDatabaseId !== '(default)'
+  ? getFirestore(app, resolvedDatabaseId)
+  : getFirestore(app);
+
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 

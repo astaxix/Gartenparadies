@@ -10,7 +10,7 @@ import LegalPage from './components/LegalPage';
 import { initialOrders, initialProducts, plannerProducts } from './data';
 import { CartItem, Product, Order, CategoryNode } from './types';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, onSnapshot, writeBatch } from 'firebase/firestore';
 import { auth, db, handleFirestoreError, OperationType } from './lib/firebase';
 
 function AppContent() {
@@ -115,14 +115,22 @@ function AppContent() {
     setProducts(newProducts);
     try {
       const existingDocs = await getDocs(collection(db, 'products'));
+      const batch = writeBatch(db);
+
+      // Collect deletions
       for (const docSnap of existingDocs.docs) {
         if (!newProducts.find(p => p.id === docSnap.id)) {
-          await deleteDoc(doc(db, 'products', docSnap.id));
+          batch.delete(doc(db, 'products', docSnap.id));
         }
       }
+
+      // Collect setter ops
       for (const prod of newProducts) {
-        await setDoc(doc(db, 'products', prod.id), prod);
+        batch.set(doc(db, 'products', prod.id), prod);
       }
+
+      await batch.commit();
+      console.log('Successfully synced products via Firestore writeBatch.');
     } catch (error) {
       console.error('Failed syncing products to store:', error);
     }

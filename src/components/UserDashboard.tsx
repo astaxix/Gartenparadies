@@ -218,6 +218,33 @@ function ProfileTab({ currentUser }: { currentUser: any }) {
   );
 }
 
+const parseDateSafe = (dateStr: string) => {
+  if (!dateStr) return 0;
+  const parsed = new Date(dateStr).getTime();
+  if (!isNaN(parsed)) return parsed;
+  
+  // Try to parse "DD.MM.YYYY, HH:MM"
+  try {
+    const parts = dateStr.match(/(\d+)\.(\d+)\.(\d+),\s+(\d+):(\d+)/);
+    if (parts) {
+      const [_, day, month, year, hour, minute] = parts;
+      const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute));
+      return date.getTime();
+    }
+  } catch (e) {}
+  return 0;
+};
+
+const formatLastEdited = (dateStr: string) => {
+  if (!dateStr) return '';
+  if (dateStr.includes('.') && dateStr.includes(',')) {
+    return dateStr;
+  }
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
+  return date.toLocaleString('de-DE', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+};
+
 function PlansTab({ currentUser }: { currentUser: any }) {
   const [plans, setPlans] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -229,7 +256,7 @@ function PlansTab({ currentUser }: { currentUser: any }) {
         const q = query(collection(db, 'plans'), where('userId', '==', currentUser.id));
         const snap = await getDocs(q);
         const data = snap.docs.map(d => d.data());
-        data.sort((a, b) => new Date(b.lastEdited).getTime() - new Date(a.lastEdited).getTime());
+        data.sort((a, b) => parseDateSafe(b.lastEdited) - parseDateSafe(a.lastEdited));
         setPlans(data);
       } catch (err) {
         console.error(err);
@@ -256,8 +283,8 @@ function PlansTab({ currentUser }: { currentUser: any }) {
           <FileText className="w-12 h-12 mx-auto text-gray-300 mb-4" />
           <p>Du hast noch keine Pläne gespeichert.</p>
           <button 
-            onClick={() => navigate('/planner')} 
-            className="mt-4 bg-emerald-100 text-emerald-700 px-4 py-2 rounded-lg font-bold hover:bg-emerald-200 transition-colors"
+            onClick={() => navigate('/planer')} 
+            className="mt-4 bg-emerald-100 text-emerald-700 px-4 py-2 rounded-lg font-bold hover:bg-emerald-200 transition-colors cursor-pointer"
           >
             Neuen Plan zeichnen
           </button>
@@ -267,9 +294,9 @@ function PlansTab({ currentUser }: { currentUser: any }) {
           {plans.map((p, i) => (
             <div key={i} className="border border-gray-200 rounded-xl p-4 bg-gray-50 hover:border-emerald-300 transition-colors group">
                <h3 className="font-bold text-gray-900 line-clamp-1 group-hover:text-emerald-700 transition-colors">{p.name || 'Unbenannter Plan'}</h3>
-               <p className="text-xs text-gray-500 mt-1">Zuletzt bearbeitet: {new Date(p.lastEdited).toLocaleDateString('de-DE')}</p>
+               <p className="text-xs text-gray-500 mt-1">Zuletzt bearbeitet: {formatLastEdited(p.lastEdited)}</p>
                <button 
-                 onClick={() => navigate('/planner', { state: { loadPlan: p.id } })}
+                 onClick={() => navigate(`/planer?load_plan=${p.id}`)}
                  className="mt-4 w-full bg-white border border-gray-300 text-gray-700 font-semibold py-2 rounded-lg hover:bg-emerald-50 hover:border-emerald-200 hover:text-emerald-700 transition-colors text-sm cursor-pointer"
                >
                  Im Planer öffnen

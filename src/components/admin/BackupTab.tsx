@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Database, Download, Upload, CheckCircle, AlertTriangle, Play, RefreshCw, FileJson } from 'lucide-react';
 import { Product, CategoryNode } from '../../types';
 import { db } from '../../lib/firebase';
-import { collection, doc, getDocs, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 
 interface BackupTabProps {
   products: Product[];
@@ -109,10 +109,16 @@ export default function BackupTab({ products, categories, onUpdateProducts, onUp
       // 3. Sync Plans if available in backup
       if (parsedData.plans && Array.isArray(parsedData.plans)) {
         setStatusMessage({ type: 'info', text: 'Importiere Pläne in die Cloud...' });
+        const batch = writeBatch(db);
+        let count = 0;
         for (const plan of parsedData.plans) {
           if (plan.id) {
-            await setDoc(doc(db, 'plans', plan.id), plan);
+            batch.set(doc(db, 'plans', plan.id), plan);
+            count++;
           }
+        }
+        if (count > 0) {
+          await batch.commit();
         }
       }
 
