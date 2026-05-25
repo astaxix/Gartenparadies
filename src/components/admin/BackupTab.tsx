@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Database, Download, Upload, CheckCircle, AlertTriangle, Play, RefreshCw, FileJson } from 'lucide-react';
 import { Product, CategoryNode } from '../../types';
-import { db } from '../../lib/firebase';
+import { db, withTimeout } from '../../lib/firebase';
 import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
 
 interface BackupTabProps {
@@ -106,7 +106,7 @@ export default function BackupTab({ products, categories, onUpdateProducts, onUp
     addLog('Verbindungstest zur Firestore-Datenbank initiiert...');
     try {
       // Import getDoc from firestore to make sure we don't fail, let's use getDocs on settings
-      const settingsSnap = await getDocs(collection(db, 'settings'));
+      const settingsSnap = await withTimeout(getDocs(collection(db, 'settings')), 6000, "Datenbank-Verbindungstest fehlgeschlagen (Timeout).");
       addLog(`Verbindungstest erfolgreich! ${settingsSnap.size} Einstellungen-Dokumente gefunden.`);
       setTestResult({
         success: true,
@@ -162,7 +162,7 @@ export default function BackupTab({ products, categories, onUpdateProducts, onUp
             }
           }
           if (count > 0) {
-            await batch.commit();
+            await withTimeout(batch.commit(), 10000, `Synchronisieren von Pläne-Block ${Math.floor(i/chunkSize) + 1} fehlgeschlagen (Timeout).`);
           }
         }
         addLog('Alle Bewässerungspläne erfolgreich in Firestore importiert.');

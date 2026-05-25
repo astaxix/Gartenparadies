@@ -12,8 +12,8 @@ interface AdminResponsiveProps {
   categories: CategoryNode[];
   orders: Order[];
   onExitAdmin: () => void;
-  onUpdateProducts: (products: Product[]) => void;
-  onUpdateCategories: (categories: CategoryNode[]) => void;
+  onUpdateProducts: (products: Product[]) => Promise<void> | any;
+  onUpdateCategories: (categories: CategoryNode[]) => Promise<void> | any;
 }
 
 export default function AdminPanel({ products, categories, orders, onExitAdmin, onUpdateProducts, onUpdateCategories }: AdminResponsiveProps) {

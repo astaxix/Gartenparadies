@@ -84,6 +84,19 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
+export function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs = 8000,
+  errorMsg = 'Datenbank-Timeout: Die Verbindung konnte nicht hergestellt werden. Bitte prüfe deine Internetverbindung, dein Firebase-Projekt und ob deine Firestore-Datenbank aktiv ist.'
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(errorMsg)), timeoutMs)
+    )
+  ]);
+}
+
 // Validate connection to Firestore on initial boot
 async function testConnection() {
   try {

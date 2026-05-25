@@ -11,7 +11,7 @@ import { initialOrders, initialProducts, plannerProducts } from './data';
 import { CartItem, Product, Order, CategoryNode } from './types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, query, where, onSnapshot, writeBatch } from 'firebase/firestore';
-import { auth, db, handleFirestoreError, OperationType } from './lib/firebase';
+import { auth, db, handleFirestoreError, OperationType, withTimeout } from './lib/firebase';
 
 function AppContent() {
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -40,7 +40,7 @@ function AppContent() {
         const userDocRef = doc(db, 'users', user.uid);
         let userData: any = null;
         try {
-          const userDoc = await getDoc(userDocRef);
+          const userDoc = await withTimeout(getDoc(userDocRef), 6000, "Verbindung zum Nutzerprofil fehlgeschlagen.");
           if (userDoc.exists()) {
             userData = userDoc.data();
           } else {
@@ -50,7 +50,7 @@ function AppContent() {
               displayName: user.displayName || '',
               email: user.email || ''
             };
-            await setDoc(userDocRef, userData);
+            await withTimeout(setDoc(userDocRef, userData), 6000, "Erstellen des Nutzerprofils fehlgeschlagen.");
           }
         } catch (err) {
           console.warn('User settings initialization skipped locally:', err);
@@ -86,14 +86,14 @@ function AppContent() {
     async function loadProducts() {
       try {
         const settingsRef = doc(db, 'settings', 'shop');
-        const settingsSnap = await getDoc(settingsRef);
+        const settingsSnap = await withTimeout(getDoc(settingsRef), 6000, "Verbindung zu den Laden-Einstellungen fehlgeschlagen.");
         if (settingsSnap.exists() && settingsSnap.data().categories) {
           const loaded = settingsSnap.data().categories;
           const parsed = loaded.map((c: any) => typeof c === 'string' ? { id: c, name: c, parentId: null } : c);
           setCategories(parsed);
         }
 
-        const querySnapshot = await getDocs(collection(db, 'products'));
+        const querySnapshot = await withTimeout(getDocs(collection(db, 'products')), 6000, "Verbindung zum Artikel-Katalog fehlgeschlagen.");
         if (!querySnapshot.empty) {
           const loadedProducts = querySnapshot.docs.map(doc => doc.data() as Product);
           // If items are present, use them
@@ -115,7 +115,7 @@ function AppContent() {
     const originalProducts = products;
     setProducts(newProducts);
     try {
-      const existingDocs = await getDocs(collection(db, 'products'));
+      const existingDocs = await withTimeout(getDocs(collection(db, 'products')), 6000, "Fehlgeschlagen beim Abrufen der aktuellen Artikel.");
       const batch = writeBatch(db);
 
       // Collect deletions
@@ -130,7 +130,7 @@ function AppContent() {
         batch.set(doc(db, 'products', prod.id), prod);
       }
 
-      await batch.commit();
+      await withTimeout(batch.commit(), 12000, "Batch-Commit der Produkte fehlgeschlagen (Timeout).");
       console.log('Successfully synced products via Firestore writeBatch.');
     } catch (error) {
       console.error('Failed syncing products to store:', error);
@@ -151,7 +151,7 @@ function AppContent() {
     setCategories(newCats);
     try {
       const settingsRef = doc(db, 'settings', 'shop');
-      await setDoc(settingsRef, { categories: newCats }, { merge: true });
+      await withTimeout(setDoc(settingsRef, { categories: newCats }, { merge: true }), 8000, "Speichern der Kategorien in die Cloud fehlgeschlagen (Timeout).");
     } catch (error) {
       console.error('Failed writing categories to store:', error);
       setCategories(originalCats);
