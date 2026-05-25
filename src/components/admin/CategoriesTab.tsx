@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Edit, Save, X, CornerDownRight } from 'lucide-react';
+import { Plus, Trash2, Edit, Save, X, CornerDownRight, RefreshCw } from 'lucide-react';
 import { CategoryNode } from '../../types';
 
 interface CategoriesTabProps {
   categories: CategoryNode[];
-  onUpdateCategories: (categories: CategoryNode[]) => void;
+  onUpdateCategories: (categories: CategoryNode[]) => Promise<void>;
 }
 
 export default function CategoriesTab({ categories, onUpdateCategories }: CategoriesTabProps) {
@@ -14,22 +14,37 @@ export default function CategoriesTab({ categories, onUpdateCategories }: Catego
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
 
-  const handleAdd = (e: React.FormEvent) => {
+  const [saving, setSaving] = useState(false);
+  const [errorText, setErrorText] = useState<string | null>(null);
+
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newCatName.trim()) {
+    if (newCatName.trim() && !saving) {
+      setSaving(true);
+      setErrorText(null);
       const newId = 'cat-' + Date.now();
       const node: CategoryNode = {
         id: newId,
         name: newCatName.trim(),
         parentId: newCatParentId === '' ? null : newCatParentId
       };
-      onUpdateCategories([...categories, node]);
-      setNewCatName('');
+      try {
+        await onUpdateCategories([...categories, node]);
+        setNewCatName('');
+      } catch (err: any) {
+        console.error(err);
+        setErrorText('Fehler beim Hinzufügen der Kategorie: ' + (err.message || String(err)));
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
-  const handleDelete = (id: string, name: string) => {
-    if (confirm(`Kategorie "${name}" wirklich löschen? ACHTUNG: Alle Unterkategorien werden ebenfalls gelöscht.`)) {
+  const handleDelete = async (id: string, name: string) => {
+    if (saving) return;
+    if (confirm(`Kategorie "${name}" wirklich löschen? ACHTUNG: Alle Unterkategorien werden देखील gelöscht.`)) {
+      setSaving(true);
+      setErrorText(null);
       const deleteIds = [id];
       // simple recursive delete simulation
       let added = true;
@@ -42,21 +57,37 @@ export default function CategoriesTab({ categories, onUpdateCategories }: Catego
           }
         });
       }
-      onUpdateCategories(categories.filter(c => !deleteIds.includes(c.id)));
+      try {
+        await onUpdateCategories(categories.filter(c => !deleteIds.includes(c.id)));
+      } catch (err: any) {
+        console.error(err);
+        setErrorText('Fehler beim Löschen der Kategorie: ' + (err.message || String(err)));
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
   const startEdit = (id: string, name: string) => {
+    if (saving) return;
     setEditingId(id);
     setEditValue(name);
   };
 
-  const saveEdit = (id: string) => {
-    if (editValue.trim()) {
-      const newCats = categories.map(c => c.id === id ? { ...c, name: editValue.trim() } : c);
-      onUpdateCategories(newCats);
+  const saveEdit = async (id: string) => {
+    if (!editValue.trim() || saving) return;
+    setSaving(true);
+    setErrorText(null);
+    const newCats = categories.map(c => c.id === id ? { ...c, name: editValue.trim() } : c);
+    try {
+      await onUpdateCategories(newCats);
+      setEditingId(null);
+    } catch (err: any) {
+      console.error(err);
+      setErrorText('Fehler beim Umbenennen der Kategorie: ' + (err.message || String(err)));
+    } finally {
+      setSaving(false);
     }
-    setEditingId(null);
   };
 
   // Helper to build tree structure for rendering
@@ -115,12 +146,27 @@ export default function CategoriesTab({ categories, onUpdateCategories }: Catego
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden max-w-3xl">
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden max-w-3xl relative">
+      {saving && <div className="absolute inset-0 bg-white/50 z-10 flex items-center justify-center pointer-events-none" />}
       <div className="p-5 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
         <h3 className="font-semibold text-gray-800 text-lg">Kategorienverwaltung</h3>
+        {saving && (
+          <span className="text-xs text-blue-600 flex items-center gap-1 font-medium bg-blue-50 px-2 py-1 rounded border border-blue-100">
+            <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Speichere...
+          </span>
+        )}
       </div>
       
       <div className="p-6">
+        {errorText && (
+          <div className="mb-6 p-4 bg-red-50 text-red-800 border-l-4 border-red-500 rounded-r-md text-xs font-sans leading-relaxed flex flex-col gap-1 shadow-sm">
+            <span className="font-bold flex items-center gap-1.5 text-red-700 text-sm">
+              <span>⚠️</span> Speichern fehlgeschlagen
+            </span>
+            <span className="text-gray-700">{errorText}</span>
+            <span className="mt-1.5 text-[10px] text-gray-405 font-mono">Stelle sicher, dass du als info@as-mietwagen-service.de eingeloggt bist und deine Internetverbindung aktiv ist.</span>
+          </div>
+        )}
         <form onSubmit={handleAdd} className="flex gap-3 mb-8 flex-col sm:flex-row">
           <input 
             type="text" 

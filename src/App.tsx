@@ -112,6 +112,7 @@ function AppContent() {
 
   // Update Products & push to Firestore
   const handleUpdateProducts = async (newProducts: Product[]) => {
+    const originalProducts = products;
     setProducts(newProducts);
     try {
       const existingDocs = await getDocs(collection(db, 'products'));
@@ -133,7 +134,8 @@ function AppContent() {
       console.log('Successfully synced products via Firestore writeBatch.');
     } catch (error) {
       console.error('Failed syncing products to store:', error);
-      throw error;
+      setProducts(originalProducts);
+      handleFirestoreError(error, OperationType.WRITE, 'products');
     }
   };
 
@@ -145,13 +147,15 @@ function AppContent() {
   ]);
 
   const handleUpdateCategories = async (newCats: CategoryNode[]) => {
+    const originalCats = categories;
     setCategories(newCats);
     try {
       const settingsRef = doc(db, 'settings', 'shop');
       await setDoc(settingsRef, { categories: newCats }, { merge: true });
     } catch (error) {
       console.error('Failed writing categories to store:', error);
-      throw error;
+      setCategories(originalCats);
+      handleFirestoreError(error, OperationType.WRITE, 'settings/shop');
     }
   };
 

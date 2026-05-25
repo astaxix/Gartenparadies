@@ -7,8 +7,8 @@ import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebas
 interface BackupTabProps {
   products: Product[];
   categories: CategoryNode[];
-  onUpdateProducts: (products: Product[]) => void;
-  onUpdateCategories: (categories: CategoryNode[]) => void;
+  onUpdateProducts: (products: Product[]) => Promise<void>;
+  onUpdateCategories: (categories: CategoryNode[]) => Promise<void>;
 }
 
 export default function BackupTab({ products, categories, onUpdateProducts, onUpdateCategories }: BackupTabProps) {
@@ -19,6 +19,14 @@ export default function BackupTab({ products, categories, onUpdateProducts, onUp
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<any | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [logs, setLogs] = useState<string[]>([]);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const addLog = (msg: string) => {
+    setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+  };
 
   const getFirebaseMode = () => {
     const isCustom = !!(import.meta as any).env.VITE_FIREBASE_PROJECT_ID;
@@ -92,27 +100,59 @@ export default function BackupTab({ products, categories, onUpdateProducts, onUp
     reader.readAsText(file);
   };
 
+  const testDbConnection = async () => {
+    setTestingConnection(true);
+    setTestResult(null);
+    addLog('Verbindungstest zur Firestore-Datenbank initiiert...');
+    try {
+      // Import getDoc from firestore to make sure we don't fail, let's use getDocs on settings
+      const settingsSnap = await getDocs(collection(db, 'settings'));
+      addLog(`Verbindungstest erfolgreich! ${settingsSnap.size} Einstellungen-Dokumente gefunden.`);
+      setTestResult({
+        success: true,
+        message: 'Erfolgreich! Verbindung zur Firestore-Datenbank wurde erfolgreich hergestellt.'
+      });
+    } catch (err: any) {
+      console.error('Connection Test Error:', err);
+      addLog(`⚠️ Verbindungstest fehlgeschlagen: ${err.message || String(err)}`);
+      setTestResult({
+        success: false,
+        message: `Fehlgeschlagen! ${err.message || String(err)}. Bitte stelle sicher, dass deine Firebase-Anmeldedaten korrekt sind und die Datenbank aktiv ist.`
+      });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
+
   const handleImport = async () => {
     if (!parsedData) return;
     setImporting(true);
+    setLogs([]);
+    addLog('== BACKUP IMPORT GESTARTET ==');
     setStatusMessage({ type: 'info', text: 'Importiere Daten und überschreibe Firestore-Collections...' });
 
     try {
       // 1. Sync Products to Firestore and App
       const importedProducts = parsedData.products as Product[];
+      addLog(`Bereite Synchronisation von ${importedProducts.length} Artikeln vor...`);
       await onUpdateProducts(importedProducts);
+      addLog('Artikel erfolgreich per writeBatch in Firestore synchronisiert.');
 
       // 2. Sync Categories to Firestore and App
       const importedCategories = (parsedData.categories || []) as CategoryNode[];
+      addLog(`Bereite Synchronisation von ${importedCategories.length} Kategorien vor...`);
       await onUpdateCategories(importedCategories);
+      addLog('Kategorien erfolgreich in Firestore/settings/shop synchronisiert.');
 
       // 3. Sync Plans if available in backup
       if (parsedData.plans && Array.isArray(parsedData.plans)) {
-        setStatusMessage({ type: 'info', text: 'Importiere Pläne in die Cloud...' });
+        addLog(`Bereite Import von ${parsedData.plans.length} Bewässerungsplänen vor...`);
+        setStatusMessage({ type: 'info', text: 'Importiere Pläne in die Cloud... Bitte warten.' });
         const plans = parsedData.plans;
         const chunkSize = 100;
         for (let i = 0; i < plans.length; i += chunkSize) {
           const chunk = plans.slice(i, i + chunkSize);
+          addLog(`Schreibe Pläne-Block ${Math.floor(i/chunkSize) + 1} (${chunk.length} Pläne) in Firestore...`);
           const batch = writeBatch(db);
           let count = 0;
           for (const plan of chunk) {
@@ -125,8 +165,10 @@ export default function BackupTab({ products, categories, onUpdateProducts, onUp
             await batch.commit();
           }
         }
+        addLog('Alle Bewässerungspläne erfolgreich in Firestore importiert.');
       }
 
+      addLog('== IMPORT-PROZESS ERFOLGREICH BEENDET ==');
       setStatusMessage({
         type: 'success',
         text: `Backup erfolgreich eingespielt! ${importedProducts.length} Artikel, ${importedCategories.length} Kategorien und ${parsedData.plans?.length || 0} Pläne wurden synchronisiert.`
@@ -135,8 +177,10 @@ export default function BackupTab({ products, categories, onUpdateProducts, onUp
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
     } catch (error: any) {
-      console.error(error);
-      setStatusMessage({ type: 'error', text: 'Fehler beim Einspielen des Backups: ' + error.message });
+      console.error('Import Error:', error);
+      const errMsg = error.message || String(error);
+      addLog(`⚠️ SCHWERWIEGENDER FEHLER: ${errMsg}`);
+      setStatusMessage({ type: 'error', text: 'Fehler beim Einspielen des Backups: ' + errMsg });
     } finally {
       setImporting(false);
     }
@@ -273,6 +317,45 @@ export default function BackupTab({ products, categories, onUpdateProducts, onUp
           </button>
         </div>
 
+      </div>
+
+      {/* Diagnostics / Realtime Console Panel */}
+      <div className="bg-slate-900 text-slate-100 rounded-xl p-5 border border-slate-800 space-y-4 shadow-md font-mono">
+        <div className="flex justify-between items-center border-b border-slate-800 pb-3 flex-wrap gap-2">
+          <h4 className="font-extrabold text-slate-200 text-sm flex items-center gap-2">
+            <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            System-Diagnose & Verbindungs-Konsole
+          </h4>
+          <button
+            onClick={testDbConnection}
+            disabled={testingConnection}
+            className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 text-white font-bold py-1 px-3 rounded text-xs transition-colors cursor-pointer"
+          >
+            {testingConnection ? <RefreshCw className="w-3 h-3 animate-spin" /> : null}
+            Datenbankverbindung testen
+          </button>
+        </div>
+
+        {testResult && (
+          <div className={`p-3 rounded border text-xs leading-relaxed ${
+            testResult.success ? 'bg-emerald-950/50 text-emerald-300 border-emerald-800' : 'bg-red-950/50 text-red-300 border-red-900'
+          }`}>
+            <span className="font-bold">{testResult.success ? '✓ ERFOLGREICH' : '❌ FEHLER'}:</span> {testResult.message}
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <span className="text-[10px] text-slate-500 block uppercase tracking-wider font-semibold">Auswertungs-Protokoll (Import / Aktionen)</span>
+          <div className="bg-slate-950 border border-slate-800 rounded p-3 h-40 overflow-y-auto font-mono text-[11px] text-emerald-400 space-y-1">
+            {logs.length === 0 ? (
+              <span className="text-slate-500 italic block">Noch keine Aktionen protokolliert. Klicke auf "Datenbankverbindung testen" oder starte einen Datei-Import.</span>
+            ) : (
+              logs.map((log, idx) => (
+                <div key={idx} className="leading-5 whitespace-pre-wrap">{log}</div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Notification Area */}
