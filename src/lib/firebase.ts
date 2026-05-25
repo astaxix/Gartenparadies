@@ -5,7 +5,10 @@ import localFirebaseConfig from '../../firebase-applet-config.json';
 
 const metaEnv = (import.meta as any).env || {};
 
-const resolvedDatabaseId = metaEnv.VITE_FIREBASE_DATABASE_ID || localFirebaseConfig.firestoreDatabaseId;
+const isCustomProject = !!metaEnv.VITE_FIREBASE_PROJECT_ID && metaEnv.VITE_FIREBASE_PROJECT_ID !== localFirebaseConfig.projectId;
+
+const resolvedDatabaseId = metaEnv.VITE_FIREBASE_DATABASE_ID || 
+  (isCustomProject ? '' : localFirebaseConfig.firestoreDatabaseId);
 
 const firebaseConfig = {
   apiKey: metaEnv.VITE_FIREBASE_API_KEY || localFirebaseConfig.apiKey,

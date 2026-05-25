@@ -109,16 +109,21 @@ export default function BackupTab({ products, categories, onUpdateProducts, onUp
       // 3. Sync Plans if available in backup
       if (parsedData.plans && Array.isArray(parsedData.plans)) {
         setStatusMessage({ type: 'info', text: 'Importiere Pläne in die Cloud...' });
-        const batch = writeBatch(db);
-        let count = 0;
-        for (const plan of parsedData.plans) {
-          if (plan.id) {
-            batch.set(doc(db, 'plans', plan.id), plan);
-            count++;
+        const plans = parsedData.plans;
+        const chunkSize = 100;
+        for (let i = 0; i < plans.length; i += chunkSize) {
+          const chunk = plans.slice(i, i + chunkSize);
+          const batch = writeBatch(db);
+          let count = 0;
+          for (const plan of chunk) {
+            if (plan.id) {
+              batch.set(doc(db, 'plans', plan.id), plan);
+              count++;
+            }
           }
-        }
-        if (count > 0) {
-          await batch.commit();
+          if (count > 0) {
+            await batch.commit();
+          }
         }
       }
 

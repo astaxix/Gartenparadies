@@ -133,6 +133,7 @@ function AppContent() {
       console.log('Successfully synced products via Firestore writeBatch.');
     } catch (error) {
       console.error('Failed syncing products to store:', error);
+      throw error;
     }
   };
 
@@ -150,6 +151,7 @@ function AppContent() {
       await setDoc(settingsRef, { categories: newCats }, { merge: true });
     } catch (error) {
       console.error('Failed writing categories to store:', error);
+      throw error;
     }
   };
 
