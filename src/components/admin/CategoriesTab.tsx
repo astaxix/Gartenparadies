@@ -164,7 +164,44 @@ export default function CategoriesTab({ categories, onUpdateCategories }: Catego
               <span>⚠️</span> Speichern fehlgeschlagen
             </span>
             <span className="text-gray-700">{errorText}</span>
-            <span className="mt-1.5 text-[10px] text-gray-405 font-mono">Stelle sicher, dass du als info@as-mietwagen-service.de eingeloggt bist und deine Internetverbindung aktiv ist.</span>
+            <span className="mt-1.5 text-[10px] text-gray-500 font-mono border-b pb-1 mb-2">Stelle sicher, dass du als info@as-mietwagen-service.de eingeloggt bist und deine Internetverbindung aktiv ist.</span>
+            
+            {/* Diagnostics and help guide */}
+            {(() => {
+              const metaEnv = (import.meta as any).env || {};
+              const projId = metaEnv.VITE_FIREBASE_PROJECT_ID;
+              const dbId = metaEnv.VITE_FIREBASE_DATABASE_ID;
+              const isGarttDb = dbId === 'gartt' || (!dbId && projId === 'gartt');
+              
+              const isTimeout = errorText.includes('Timeout') || errorText.includes('timeout') || errorText.includes('Datenbank-Timeout');
+              
+              if (isTimeout) {
+                return (
+                  <div className="mt-2 bg-yellow-50 p-3 rounded border border-yellow-200 text-yellow-905">
+                    <p className="font-semibold text-xs mb-1">💡 Warum schlägt die Verbindung fehl (Timeout)?</p>
+                    <p className="mb-2">
+                      Ein Timeout bedeutet fast immer, dass die App versucht, sich mit einer Firebase-Datenbank zu verbinden, die unter den geladenen Anmeldedaten nicht erreichbar ist. 
+                      Da du deine eigene Datenbank <strong>"gartt"</strong> verwendest, überprüfe bitte Folgendes:
+                    </p>
+                    <ul className="list-disc pl-4 space-y-1 mb-2">
+                      <li>Hast du <strong>VITE_FIREBASE_PROJECT_ID</strong> auf <code>gartt</code> gesetzt? ({projId ? <span className="text-emerald-700 font-semibold">Ja, Wert: "{projId}"</span> : <span className="text-rose-700 font-semibold">Nein, leer!</span>})</li>
+                      <li>Hast du <strong>VITE_FIREBASE_DATABASE_ID</strong> auf <code>gartt</code> gesetzt? ({dbId ? <span className="text-emerald-700 font-semibold">Ja, Wert: "{dbId}"</span> : <span className="text-orange-700 font-semibold">Nein (Default sandbox)</span>})</li>
+                      <li>Hast du alle weiteren Variablen für dein eigenes Projekt in AI Studio unter <strong>Einstellungen ⚙️ (Environment Variables / Secrets)</strong> eingetragen?</li>
+                    </ul>
+                    <p className="text-[10px] font-mono leading-normal bg-white/60 p-1.5 rounded border border-yellow-100">
+                      <strong>Benötigte Variablen in AI Studio Secrets:</strong><br/>
+                      - VITE_FIREBASE_API_KEY (dein Firebase Web API Key)<br/>
+                      - VITE_FIREBASE_PROJECT_ID: gartt<br/>
+                      - VITE_FIREBASE_DATABASE_ID: gartt<br/>
+                      - VITE_FIREBASE_AUTH_DOMAIN: gartt.firebaseapp.com<br/>
+                      - VITE_FIREBASE_STORAGE_BUCKET: gartt.firebasestorage.app<br/>
+                      - VITE_FIREBASE_APP_ID (deine Firebase Web App-ID)
+                    </p>
+                  </div>
+                );
+              }
+              return null;
+            })()}
           </div>
         )}
         <form onSubmit={handleAdd} className="flex gap-3 mb-8 flex-col sm:flex-row">

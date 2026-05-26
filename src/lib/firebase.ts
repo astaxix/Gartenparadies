@@ -7,8 +7,9 @@ const metaEnv = (import.meta as any).env || {};
 
 const isCustomProject = !!metaEnv.VITE_FIREBASE_PROJECT_ID && metaEnv.VITE_FIREBASE_PROJECT_ID !== localFirebaseConfig.projectId;
 
-const resolvedDatabaseId = metaEnv.VITE_FIREBASE_DATABASE_ID || 
-  (isCustomProject ? 'gartt' : localFirebaseConfig.firestoreDatabaseId);
+const resolvedDatabaseId = isCustomProject 
+  ? (metaEnv.VITE_FIREBASE_DATABASE_ID || 'gartt')
+  : localFirebaseConfig.firestoreDatabaseId;
 
 const firebaseConfig = {
   apiKey: metaEnv.VITE_FIREBASE_API_KEY || localFirebaseConfig.apiKey,

@@ -242,6 +242,12 @@ export default function BackupTab({ products, categories, onUpdateProducts, onUp
               <span className="font-mono text-gray-700 bg-gray-50 border p-1 rounded block truncate mt-0.5">{getFirebaseProjectId()}</span>
             </div>
             <div>
+              <span className="block text-gray-400 font-medium font-mono uppercase">Datenbank-ID (Database ID)</span>
+              <span className="font-mono text-gray-700 bg-gray-50 border p-1 rounded block truncate mt-0.5">
+                {(import.meta as any).env.VITE_FIREBASE_DATABASE_ID || 'ai-studio-48662a55-a00b-452b-9200-d423535ff85a (Sandbox Default)'}
+              </span>
+            </div>
+            <div>
               <span className="block text-gray-400 font-medium font-mono uppercase">Aktive Artikel im Speicher</span>
               <span className="text-lg font-bold text-gray-900">{products.length}</span>
             </div>
@@ -250,10 +256,55 @@ export default function BackupTab({ products, categories, onUpdateProducts, onUp
               <span className="text-lg font-bold text-gray-900">{categories.length}</span>
             </div>
           </div>
-          <div className="bg-blue-50/50 p-3 rounded-md border border-blue-100 text-xs text-blue-800">
+
+          <div className="border-t pt-3 space-y-2">
+            <span className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest font-mono">Umgebungs-Variablen Quickcheck</span>
+            {(() => {
+              const metaEnv = (import.meta as any).env || {};
+              const vars = [
+                { name: 'VITE_FIREBASE_PROJECT_ID', val: metaEnv.VITE_FIREBASE_PROJECT_ID },
+                { name: 'VITE_FIREBASE_DATABASE_ID', val: metaEnv.VITE_FIREBASE_DATABASE_ID },
+                { name: 'VITE_FIREBASE_API_KEY', val: metaEnv.VITE_FIREBASE_API_KEY, secure: true },
+                { name: 'VITE_FIREBASE_APP_ID', val: metaEnv.VITE_FIREBASE_APP_ID, secure: true },
+              ];
+              const dbId = metaEnv.VITE_FIREBASE_DATABASE_ID;
+              const projId = metaEnv.VITE_FIREBASE_PROJECT_ID;
+              const isDatabaseMismatch = dbId === 'gartt' && !projId;
+
+              return (
+                <div className="space-y-1.5 text-[10px]">
+                  {vars.map(v => (
+                    <div key={v.name} className="flex justify-between items-center text-[10px]">
+                      <span className="font-mono text-gray-500 truncate max-w-[150px]">{v.name}:</span>
+                      {v.val ? (
+                        <span className="text-emerald-700 bg-emerald-50 px-1 border border-emerald-200 rounded font-bold font-mono">
+                          {v.secure ? '✓ Gesetz' : `✓ "${v.val}"`}
+                        </span>
+                      ) : (
+                        <span className="text-rose-700 bg-rose-50 px-1 border border-rose-200 rounded font-bold">
+                          ✖ Leer / Sandbox
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                  
+                  {isDatabaseMismatch && (
+                    <div className="p-2 bg-red-50 text-red-900 border border-red-200 rounded text-[9px] font-sans leading-relaxed mt-2">
+                      <p className="font-bold flex items-center gap-1 mb-1 text-red-800">
+                        <span>⚠️ Mismatch erkannt!</span>
+                      </p>
+                      Du hast <strong>VITE_FIREBASE_DATABASE_ID="gartt"</strong> konfiguriert, aber <strong>VITE_FIREBASE_PROJECT_ID</strong> ist leer.
+                      Das Standard-Sandboxprojekt besitzt keine Datenbank namens 'gartt', was zu Timeouts führt! Bitte trage Projekt-ID, API-Key und App-ID deines eigenen Projekts in AI Studio Secrets ein.
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+
+          <div className="bg-blue-50/50 p-2.5 rounded-md border border-blue-100 text-[10px] text-blue-800 leading-normal">
             <p className="leading-relaxed">
-              <strong>Info:</strong> Wenn du die App auf Vercel deployst, kannst du eigene Firebase-Credentials in den Vercel <strong>Environment Variables</strong> eintragen (siehe `.env.example`).
-              Andernfalls wird das verknüpfte Sandbox-Projekt verwendet.
+              <strong>Info:</strong> Wenn du die App auf deines eigenen Firebase-Projekts betreibst, kannst du die Credentials in den AI Studio <strong>Environment Variables / Secrets</strong> eintragen (siehe `.env.example`).
             </p>
           </div>
         </div>
