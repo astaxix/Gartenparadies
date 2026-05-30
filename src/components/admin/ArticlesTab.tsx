@@ -230,24 +230,22 @@ export default function ArticlesTab({ products, categories, onUpdateProducts }: 
                     <input 
                       type="checkbox" 
                       id={`cat-${c.id}`}
-                      checked={formCategory === c.id || (editingProduct?.categories || []).includes(c.id)}
+                      checked={formCategories.includes(c.id)}
                       onChange={(e) => {
                         const checked = e.target.checked;
+                        let newCats = [...formCategories];
+                        if (checked && !newCats.includes(c.id)) newCats.push(c.id);
+                        if (!checked) newCats = newCats.filter(id => id !== c.id);
+                        
+                        setFormCategories(newCats);
+                        setFormCategory(newCats[0] || '');
+                        
                         if (editingProduct) {
-                          const currentCats = editingProduct.categories || [editingProduct.category].filter(Boolean);
-                          let newCats = [...currentCats];
-                          if (checked && !newCats.includes(c.id)) newCats.push(c.id);
-                          if (!checked) newCats = newCats.filter(id => id !== c.id);
-                          
                           setEditingProduct({
                             ...editingProduct,
                             categories: newCats,
                             category: newCats[0] || ''
                           });
-                          setFormCategory(newCats[0] || '');
-                        } else {
-                          // Very hacky state management for creation...
-                          // Ideally we'd use a dedicated state for formCategories
                         }
                       }}
                       className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
