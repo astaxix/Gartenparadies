@@ -160,7 +160,11 @@ export default function CartSidebar({
                                     <button 
                                       onClick={() => onUpdateQuantity(index, -1)}
                                       className="text-gray-500 hover:text-emerald-600 disabled:opacity-50 cursor-pointer"
-                                      disabled={item.quantity <= 1}
+                                      disabled={(() => {
+                                        const ln = item.name.toLowerCase();
+                                        const is25 = ln.includes('pe rohr') || ln.includes('pe-rohr') || ln.includes('tropfrohr') || ln.includes('tropfschlauch');
+                                        return item.quantity <= (is25 ? 25 : 1);
+                                      })()}
                                     >
                                       <Minus className="w-3 h-3" />
                                     </button>

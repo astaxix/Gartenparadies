@@ -79,6 +79,12 @@ export default function ShopFront({
     fetchPlans();
   }, [currentUser, isSavedPlansModalOpen]);
 
+  const isRoundedTo25 = (product: Product | null) => {
+    if (!product) return false;
+    const ln = product.name.toLowerCase();
+    return ln.includes('pe rohr') || ln.includes('pe-rohr') || ln.includes('tropfrohr') || ln.includes('tropfschlauch');
+  };
+
   useEffect(() => {
     if (selectedProduct && selectedProduct.variations) {
       const initial: Record<string, string> = {};
@@ -88,7 +94,10 @@ export default function ShopFront({
         }
       });
       setSelectedVariations(initial);
-      setSelectedQuantity(1);
+      setSelectedQuantity(isRoundedTo25(selectedProduct) ? 25 : 1);
+    } else if (selectedProduct) {
+      setSelectedVariations({});
+      setSelectedQuantity(isRoundedTo25(selectedProduct) ? 25 : 1);
     } else {
       setSelectedVariations({});
       setSelectedQuantity(1);
@@ -277,8 +286,10 @@ export default function ShopFront({
     return descendants;
   };
 
+  const isPlaner = (str: string | undefined) => str ? str.toLowerCase().includes('planer') : false;
+
   const filteredProducts = products.filter(p => {
-    if (p.category === 'Planer Artikel' || p.categories?.includes('Planer Artikel')) return false;
+    if (isPlaner(p.category) || p.categories?.some(isPlaner)) return false;
 
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           p.articleNumber?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -288,12 +299,15 @@ export default function ShopFront({
       const allowedCategories = [activeCategory.id, ...getDescendantCategoryIds(activeCategory.id, categories)];
       matchesCategory = (p.categories || [p.category].filter(Boolean)).some(catId => allowedCategories.includes(catId));
     } else {
-      matchesCategory = !(p.categories || [p.category]).some(id => categories.find(c => c.id === id)?.name === 'Planer Artikel' || id === 'Planer Artikel');
+      matchesCategory = !(p.categories || [p.category]).some(id => {
+        const cat = categories.find(c => c.id === id);
+        return isPlaner(cat?.name) || isPlaner(id);
+      });
     }
     return matchesSearch && matchesCategory;
   });
 
-  const displayCategories = categories.filter(c => c.name !== 'Planer Artikel' && !c.parentId);
+  const displayCategories = categories.filter(c => !isPlaner(c.name) && !c.parentId);
   
   const currentSubcategories = activeCategory 
     ? categories.filter(c => c.parentId === activeCategory.id)
@@ -317,47 +331,153 @@ export default function ShopFront({
         <div className="max-w-[1400px] mx-auto px-2 md:px-6 py-2 md:py-6 relative">
           <div className="flex items-center justify-between md:gap-8 relative w-full h-12 sm:h-14 md:h-auto">
           
-          {/* Logo and Menu Box */}
-          <div className="flex items-center gap-2 md:gap-6 shrink-0 z-20">
+          {/* Menu and Logo Box */}
+          <div className="flex items-center gap-4 md:gap-8 shrink-0 z-50">
+            {/* Category Menu */}
             <div ref={categoryMenuRef} className="relative shrink-0">
               <button 
                 onClick={() => setIsCategoryMenuOpen(!isCategoryMenuOpen)}
-                className="p-1 md:p-3 hover:bg-gray-100 rounded-md transition-colors text-gray-700"
+                className="p-2 md:p-3 flex items-center gap-2 hover:bg-emerald-50 rounded-xl transition-all text-[#152B4B] md:bg-gray-50 md:border md:border-gray-200 shadow-sm hover:shadow hover:scale-105"
               >
-                <Menu className="w-5 h-5 md:w-7 md:h-7" />
+                <Menu className="w-9 h-9 md:w-11 md:h-11 text-[#152B4B]" strokeWidth={2.5} />
+                <span className="hidden lg:block font-bold text-lg pr-2 text-[#152B4B]">Kategorien</span>
               </button>
               
-              {isCategoryMenuOpen && (
-                <div className="absolute left-0 top-full mt-2 w-72 md:w-64 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                  <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50">
-                    <h3 className="font-bold text-gray-900 text-sm md:text-base">Kategorien</h3>
-                  </div>
-                  <ul className="py-2">
-                    <li>
-                      <button 
-                        onClick={() => { setActiveCategory(null); setIsCategoryMenuOpen(false); }}
-                        className={`w-full text-left px-4 py-2 text-sm md:text-base hover:bg-emerald-50 hover:text-emerald-700 transition-colors ${activeCategory === null ? 'bg-emerald-50 text-emerald-700 font-medium' : 'text-gray-700'}`}
-                      >
-                        Alle Produkte
-                      </button>
-                    </li>
-                    {displayCategories.map(c => (
-                      <li key={c.id}>
+              <AnimatePresence>
+                {isCategoryMenuOpen && (
+                  <>
+                    {/* Dark translucent backdrop */}
+                    <motion.div
+                      key="category-sidebar-backdrop"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      onClick={() => setIsCategoryMenuOpen(false)}
+                      className="fixed inset-0 bg-emerald-950/60 backdrop-blur-xs z-50 cursor-pointer"
+                    />
+
+                    {/* Animated Sliding Sidebar Drawer on the Left */}
+                    <motion.div
+                      key="category-sidebar-drawer"
+                      initial={{ x: '-100%' }}
+                      animate={{ x: 0 }}
+                      exit={{ x: '-100%' }}
+                      transition={{ type: 'spring', damping: 26, stiffness: 220 }}
+                      className="fixed inset-y-0 left-0 w-80 max-w-[90vw] bg-white shadow-2xl z-50 flex flex-col border-r border-[#E2E8F0] h-full"
+                    >
+                      {/* Sidebar Header */}
+                      <div className="p-6 bg-[#F8FAFC] border-b border-[#E2E8F0] flex items-center justify-between shrink-0">
+                        <div className="flex items-center gap-2">
+                          <div className="flex -space-x-1 relative scale-90">
+                            <Droplets className="w-6 h-6 text-[#1388C9]" />
+                            <Leaf className="w-6 h-6 text-[#56A02B] absolute left-2 top-0" />
+                          </div>
+                          <span className="font-bold text-xl text-[#152B4B] tracking-tight">Kategorien</span>
+                        </div>
                         <button 
-                          onClick={() => { setActiveCategory(c); setIsCategoryMenuOpen(false); }}
-                          className={`w-full text-left px-4 py-2 text-sm md:text-base hover:bg-emerald-50 hover:text-emerald-700 transition-colors ${activeCategory?.id === c.id ? 'bg-emerald-50 text-emerald-700 font-medium' : 'text-gray-700'}`}
+                          onClick={() => setIsCategoryMenuOpen(false)}
+                          aria-label="Schließen"
+                          className="p-2 text-gray-400 hover:text-red-500 hover:bg-rose-50 rounded-full transition-all duration-200"
                         >
-                          {c.name}
+                          <X className="w-6 h-6" />
                         </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+                      </div>
+
+                      {/* Mobile search integration inside Sidebar */}
+                      <div className="p-4 border-b border-gray-100 bg-white md:hidden shrink-0 box-border w-full">
+                        <div className="relative border border-gray-200 bg-gray-50 rounded-xl overflow-hidden focus-within:border-emerald-400 focus-within:ring-1 focus-within:ring-emerald-100">
+                          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input 
+                            type="text" 
+                            placeholder="Suche..." 
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onFocus={() => setIsSearchFocused(false)}
+                            className="block w-full box-border bg-transparent py-2.5 pl-9 pr-4 text-sm outline-none text-gray-800 placeholder:text-gray-400 m-0"
+                            style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Scrollable List of Categories */}
+                      <div className="flex-1 overflow-y-auto py-4">
+                        <div className="px-6 mb-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                          Sortiment durchstöbern
+                        </div>
+                        <ul className="space-y-1.5 px-3">
+                          {/* Alle Produkte Option */}
+                          <li>
+                            <button 
+                              onClick={() => { setActiveCategory(null); setIsCategoryMenuOpen(false); }}
+                              className={`w-full text-left px-4 py-3 text-base rounded-lg transition-all flex items-center justify-between ${activeCategory === null ? 'bg-emerald-50 text-emerald-800 font-bold border-l-4 border-emerald-500 shadow-xs' : 'text-gray-700 hover:bg-gray-50'}`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <Package className="w-5 h-5 text-emerald-600" />
+                                <span className="font-medium">Alle Produkte</span>
+                              </div>
+                              <ChevronRight className="w-4 h-4 opacity-50" />
+                            </button>
+                          </li>
+
+                          {/* Dynamic Categories List */}
+                          {displayCategories.map(c => {
+                            const children = categories.filter(child => child.parentId === c.id && !isPlaner(child.name));
+                            const isActive = activeCategory?.id === c.id;
+                            const hasActiveChild = activeCategory && children.some(child => child.id === activeCategory.id);
+
+                            return (
+                              <li key={c.id} className="space-y-1">
+                                <button 
+                                  onClick={() => { setActiveCategory(c); setIsCategoryMenuOpen(false); }}
+                                  className={`w-full text-left px-4 py-3 text-base rounded-lg transition-all flex items-center justify-between ${isActive || hasActiveChild ? 'bg-emerald-50 text-emerald-800 font-bold border-l-4 border-emerald-500 shadow-xs' : 'text-gray-700 hover:bg-gray-50'}`}
+                                >
+                                  <div className="flex items-center gap-2.5">
+                                    <Leaf className="w-5 h-5 text-emerald-500 shrink-0" />
+                                    <span className="truncate font-medium">{c.name}</span>
+                                  </div>
+                                  <ChevronRight className={`w-4 h-4 opacity-50 transition-all duration-200 ${isActive || hasActiveChild ? 'rotate-90 text-emerald-600 font-bold' : ''}`} />
+                                </button>
+
+                                {/* Detailed Indented Subcategories Support within Sidebar */}
+                                {children.length > 0 && (isActive || hasActiveChild) && (
+                                  <ul className="pl-8 pr-2 py-1 space-y-1 bg-emerald-50/25 rounded-md mt-1 border-l-2 border-emerald-200/50">
+                                    {children.map(sub => (
+                                      <li key={sub.id}>
+                                        <button
+                                          onClick={() => { setActiveCategory(sub); setIsCategoryMenuOpen(false); }}
+                                          className={`w-full text-left px-3 py-2 text-sm rounded-md transition-all flex items-center gap-1.5 ${activeCategory?.id === sub.id ? 'text-emerald-700 font-bold bg-emerald-100/60' : 'text-gray-600 hover:text-emerald-700 hover:bg-emerald-50/40'}`}
+                                        >
+                                          <CornerDownRight className="w-3.5 h-3.5 shrink-0 text-emerald-400" />
+                                          <span className="truncate">{sub.name}</span>
+                                        </button>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+
+                      {/* Sidebar Footer Info */}
+                      <div className="p-6 bg-[#F8FAFC] border-t border-[#E2E8F0] space-y-3 shrink-0">
+                        <div className="flex items-center gap-2 text-xs text-emerald-800 font-semibold bg-emerald-50 px-3 py-2.5 rounded-lg border border-emerald-100">
+                          <Droplets className="w-4 h-4 text-emerald-600" />
+                          <span>Kostenlose Lieferung ab 49€</span>
+                        </div>
+                        <div className="text-center text-[11px] text-gray-400 font-medium">
+                          © {new Date().getFullYear()} Gartenparadies GmbH
+                        </div>
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Logo Center */}
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 md:static md:transform-none flex items-center gap-1 md:gap-3 shrink-0 cursor-pointer overflow-hidden z-10 w-auto" onClick={() => setActiveCategory(null)}>
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 md:static md:translate-x-0 md:translate-y-0 md:transform-none flex items-center gap-1 md:gap-3 shrink-0 cursor-pointer overflow-hidden z-10 w-auto" onClick={() => setActiveCategory(null)}>
               <div className="flex -space-x-1 relative shrink-0">
                 <Droplets className="w-8 h-8 sm:w-10 sm:h-10 md:w-14 md:h-14 text-[#1388C9]" />
                 <Leaf className="w-8 h-8 sm:w-10 sm:h-10 md:w-14 md:h-14 text-[#56A02B] absolute left-2.5 top-0" />
@@ -385,7 +505,8 @@ export default function ShopFront({
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onFocus={() => setIsSearchFocused(true)}
-                className="w-full bg-transparent py-3 md:py-4 pl-12 md:pl-14 pr-12 text-sm md:text-base outline-none text-gray-800 placeholder:text-gray-400"
+                className="w-full box-border bg-transparent py-3 md:py-4 pl-12 md:pl-14 pr-12 text-sm md:text-base outline-none text-gray-800 placeholder:text-gray-400 m-0"
+                style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
               />
               {searchQuery && (
                 <button 
@@ -435,7 +556,7 @@ export default function ShopFront({
           </div>
 
           {/* Actions (Right) */}
-          <div className="flex items-center gap-3 sm:gap-6 shrink-0 relative z-20">
+          <div className="flex items-center gap-3 sm:gap-6 shrink-0 relative z-50">
             <button 
               className="relative flex items-center justify-center p-1 text-[#4A8EC3] hover:text-emerald-600 transition-colors"
               onClick={onOpenCart}
@@ -608,7 +729,8 @@ export default function ShopFront({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onFocus={() => setIsSearchFocused(true)}
-              className="w-full bg-transparent py-3 pl-12 pr-12 text-sm outline-none text-gray-800 placeholder:text-gray-400"
+              className="w-full box-border bg-transparent py-3 pl-12 pr-12 text-sm outline-none text-gray-800 placeholder:text-gray-400 m-0"
+              style={{ minWidth: 0, width: '100%', maxWidth: '100%' }}
             />
             {searchQuery && (
               <button 
@@ -660,15 +782,15 @@ export default function ShopFront({
     </header>
 
       {/* Hero Section */}
-      <section className="relative bg-emerald-900 text-white overflow-hidden py-16 md:py-24 lg:py-32">
-        <div className="absolute inset-0 opacity-40 mix-blend-overlay">
+      <section className="relative bg-[#0d2a1b] text-white overflow-hidden py-16 md:py-24 lg:py-32">
+        <div className="absolute inset-0 opacity-80">
           <img 
-            src="https://images.unsplash.com/photo-1558449028-b53a39d100fc?auto=format&fit=crop&q=80&w=2000" 
-            alt="Garden background" 
+            src="https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?auto=format&fit=crop&q=80&w=2000" 
+            alt="Garden and Agriculture background" 
             className="w-full h-full object-cover"
           />
         </div>
-        <div className="absolute inset-0 bg-gradient-to-t from-emerald-950 via-emerald-900/60 to-transparent"></div>
+        <div className="absolute inset-0 bg-gradient-to-t from-[#091f14] via-[#0d2a1b]/40 to-[#091f14]/20"></div>
         <div className="max-w-7xl mx-auto px-4 relative z-10 flex flex-col items-center text-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
@@ -730,7 +852,7 @@ export default function ShopFront({
                   Alle
                 </button>
                 {/* Find siblings if we have an active category */}
-                {(activeCategory ? categories.filter(c => c.parentId === activeCategory.parentId) : displayCategories).map(cat => (
+                {(activeCategory ? categories.filter(c => c.parentId === activeCategory.parentId && !isPlaner(c.name)) : displayCategories).map(cat => (
                   <button 
                     key={cat.id}
                     onClick={() => setActiveCategory(cat)}
@@ -1062,15 +1184,21 @@ export default function ShopFront({
                 <div className="mt-auto pt-6 border-t border-gray-200 flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
                   <div className="flex items-center justify-between border border-gray-300 rounded-xl px-4 py-2 h-14 bg-white shrink-0">
                     <button 
-                      onClick={() => setSelectedQuantity(Math.max(1, selectedQuantity - 1))}
+                      onClick={() => {
+                        const step = isRoundedTo25(selectedProduct) ? 25 : 1;
+                        setSelectedQuantity(Math.max(step, selectedQuantity - step));
+                      }}
                       className="text-gray-500 hover:text-emerald-600 disabled:opacity-50 p-2"
-                      disabled={selectedQuantity <= 1}
+                      disabled={isRoundedTo25(selectedProduct) ? selectedQuantity <= 25 : selectedQuantity <= 1}
                     >
                       <Minus className="w-5 h-5" />
                     </button>
                     <span className="w-12 text-center font-bold text-lg text-gray-800">{selectedQuantity}</span>
                     <button 
-                      onClick={() => setSelectedQuantity(selectedQuantity + 1)}
+                      onClick={() => {
+                        const step = isRoundedTo25(selectedProduct) ? 25 : 1;
+                        setSelectedQuantity(selectedQuantity + step);
+                      }}
                       className="text-gray-500 hover:text-emerald-600 p-2"
                       disabled={selectedQuantity >= selectedProduct.stock}
                     >

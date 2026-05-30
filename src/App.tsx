@@ -159,11 +159,22 @@ function AppContent() {
     }
   };
 
-  // Load user shopping cart from Firestore on login
+  // Load user shopping cart from Firestore on login with local storage resilience
   useEffect(() => {
     if (!currentUser) {
       setCartItems([]);
       return;
+    }
+
+    // Load from local storage immediately as an instant robust fallback
+    const localCartKey = `cart_items_${currentUser.id}`;
+    const cachedCart = localStorage.getItem(localCartKey);
+    if (cachedCart) {
+      try {
+        setCartItems(JSON.parse(cachedCart));
+      } catch (e) {
+        console.warn('Could not parse cached cart, starting fresh:', e);
+      }
     }
 
     async function loadCart() {
@@ -173,19 +184,24 @@ function AppContent() {
           const cartData = cartDoc.data();
           if (cartData.items) {
             setCartItems(cartData.items);
+            localStorage.setItem(localCartKey, JSON.stringify(cartData.items));
           }
         }
       } catch (err) {
-        console.error('Error loading cart from Firestore:', err);
+        console.warn('Unable to sync cart from Firestore (offline Mode). Local shopping cart loaded instead:', err);
       }
     }
     loadCart();
   }, [currentUser]);
 
-  // Save/Sync cart to Firestore online (using debounced timeout)
+  // Save/Sync cart to Firestore online and local storage (using debounced timeout)
   useEffect(() => {
-    if (!currentUser || cartItems.length === 0) return;
+    if (!currentUser) return;
 
+    const localCartKey = `cart_items_${currentUser.id}`;
+    localStorage.setItem(localCartKey, JSON.stringify(cartItems));
+
+    // If it's an empty cart, update local storage but still trigger database update
     const timer = setTimeout(async () => {
       try {
         await setDoc(doc(db, 'carts', currentUser.id), {
@@ -194,7 +210,7 @@ function AppContent() {
           updatedAt: new Date().toISOString()
         });
       } catch (err) {
-        console.error('Error saving cart to Firestore:', err);
+        console.warn('Unable to sync cart to Firestore (offline Mode). Changes preserved locally:', err);
       }
     }, 1200);
 
@@ -296,7 +312,13 @@ function AppContent() {
   const handleUpdateCartQuantity = (itemIndex: number, delta: number) => {
     setCartItems(prev => prev.map((item, index) => {
       if (index === itemIndex) {
-        const newQuantity = Math.max(1, item.quantity + delta);
+        let step = 1;
+        const ln = item.name.toLowerCase();
+        if (ln.includes('pe rohr') || ln.includes('pe-rohr') || ln.includes('tropfrohr') || ln.includes('tropfschlauch')) {
+          step = 25;
+        }
+        const effectiveDelta = delta > 0 ? step : -step;
+        const newQuantity = Math.max(step, item.quantity + effectiveDelta);
         return { ...item, quantity: newQuantity, price: getUnitPrice(item as Product, item.selectedVariations, newQuantity) };
       }
       return item;

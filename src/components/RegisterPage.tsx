@@ -10,6 +10,7 @@ export default function RegisterPage() {
   const [formData, setFormData] = useState({
     name: '',
     company: '',
+    vatId: '',
     street: '',
     postalCode: '',
     city: '',
@@ -48,6 +49,7 @@ export default function RegisterPage() {
         displayName: formData.name,
         email: formData.email,
         company: formData.company,
+        vatId: formData.vatId,
         address: {
           street: formData.street,
           postalCode: formData.postalCode,
@@ -139,6 +141,12 @@ export default function RegisterPage() {
                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Firma <span className="text-gray-400 font-normal normal-case">(optional)</span></label>
                 <input name="company" value={formData.company} onChange={handleChange} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all shadow-sm" placeholder="Mustermann GmbH" />
               </div>
+              {formData.company && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">USt-IdNr. <span className="text-gray-400 font-normal normal-case">(optional)</span></label>
+                  <input name="vatId" value={formData.vatId} onChange={handleChange} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all shadow-sm" placeholder="DE123456789" />
+                </div>
+              )}
 
               <div className="md:col-span-2">
                 <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Straße & Hausnummer *</label>

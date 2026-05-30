@@ -89,6 +89,7 @@ function ProfileTab({ currentUser }: { currentUser: any }) {
   const [formData, setFormData] = useState({
     displayName: currentUser?.displayName || '',
     company: currentUser?.company || '',
+    vatId: currentUser?.vatId || '',
     street: currentUser?.address?.street || '',
     postalCode: currentUser?.address?.postalCode || '',
     city: currentUser?.address?.city || '',
@@ -110,6 +111,7 @@ function ProfileTab({ currentUser }: { currentUser: any }) {
       await setDoc(userRef, {
         displayName: formData.displayName,
         company: formData.company,
+        vatId: formData.vatId,
         address: {
           street: formData.street,
           postalCode: formData.postalCode,
@@ -165,6 +167,17 @@ function ProfileTab({ currentUser }: { currentUser: any }) {
                <input name="company" value={formData.company} onChange={handleChange} className="pl-10 w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all shadow-sm" />
             </div>
           </div>
+          {formData.company && (
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">USt-IdNr. <span className="font-normal normal-case text-gray-400">(optional)</span></label>
+              <div className="relative">
+                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                   <FileText className="w-5 h-5 text-gray-400" />
+                 </div>
+                 <input name="vatId" value={formData.vatId} onChange={handleChange} className="pl-10 w-full bg-white border border-gray-300 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 outline-none transition-all shadow-sm" />
+              </div>
+            </div>
+          )}
 
           <div className="sm:col-span-2 mt-4 pt-6 border-t border-gray-100">
              <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">

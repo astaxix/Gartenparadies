@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, doc, getDocFromServer, enableIndexedDbPersistence } from 'firebase/firestore';
 import localFirebaseConfig from '../../firebase-applet-config.json';
 
 const metaEnv = (import.meta as any).env || {};
@@ -24,6 +24,23 @@ const app = initializeApp(firebaseConfig);
 export const db = resolvedDatabaseId && resolvedDatabaseId !== 'default' && resolvedDatabaseId !== '(default)'
   ? getFirestore(app, resolvedDatabaseId)
   : getFirestore(app);
+
+// Enable offline persistence for Firestore
+if (typeof window !== 'undefined') {
+  enableIndexedDbPersistence(db)
+    .then(() => {
+      console.log('Firestore offline persistence enabled successfully.');
+    })
+    .catch((err) => {
+      if (err.code === 'failed-precondition') {
+        console.warn('Firestore persistence failed: Multiple tabs open.');
+      } else if (err.code === 'unimplemented') {
+        console.warn('Firestore persistence not supported by this browser.');
+      } else {
+        console.warn('Firestore persistence error:', err);
+      }
+    });
+}
 
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
@@ -98,14 +115,44 @@ export function withTimeout<T>(
   ]);
 }
 
-// Validate connection to Firestore on initial boot
+// Validate connection to Firestore on initial boot and manage offline system state
+export let isOffline = false;
+const offlineCallbacks = new Set<(status: boolean) => void>();
+
+export function subscribeOfflineStatus(callback: (status: boolean) => void) {
+  offlineCallbacks.add(callback);
+  callback(isOffline);
+  return () => {
+    offlineCallbacks.delete(callback);
+  };
+}
+
+function setOfflineStatus(status: boolean) {
+  if (isOffline !== status) {
+    isOffline = status;
+    offlineCallbacks.forEach(cb => cb(isOffline));
+  }
+}
+
 async function testConnection() {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    await withTimeout(getDocFromServer(doc(db, 'test', 'connection')), 3500);
+    setOfflineStatus(false);
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration: Firestore Client is offline.");
-    }
+    setOfflineStatus(true);
+    console.warn("Firestore connection check: Client ofline/unavailable. Standard local cache database fallbacks enabled.");
   }
 }
 testConnection();
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    testConnection();
+  });
+  window.addEventListener('offline', () => {
+    setOfflineStatus(true);
+  });
+  if (!navigator.onLine) {
+    setOfflineStatus(true);
+  }
+}

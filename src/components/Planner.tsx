@@ -274,13 +274,18 @@ export default function Planner({
     const list: any[] = [];
 
     // --- PE Pipes Sized: 25mm, 32mm, 40mm (with 10% safety buffer) ---
-    const len25 = Math.ceil(
+    let len25 = Math.ceil(
       (data.pePipeLength25Meters !== undefined
         ? data.pePipeLength25Meters
         : data.pePipeLengthMeters) * 1.1,
     );
-    const len32 = Math.ceil((data.pePipeLength32Meters || 0) * 1.1);
-    const len40 = Math.ceil((data.pePipeLength40Meters || 0) * 1.1);
+    let len32 = Math.ceil((data.pePipeLength32Meters || 0) * 1.1);
+    let len40 = Math.ceil((data.pePipeLength40Meters || 0) * 1.1);
+
+    // Round up PE Rohr to next 25m
+    if (len25 > 0) len25 = Math.ceil(len25 / 25) * 25;
+    if (len32 > 0) len32 = Math.ceil(len32 / 25) * 25;
+    if (len40 > 0) len40 = Math.ceil(len40 / 25) * 25;
 
     if (len25 > 0) {
       const p = findPlannerItem("pe_pipe", "PE-Rohr PN10 25mm");
@@ -373,6 +378,8 @@ export default function Planner({
 
     // --- Soft PE Flex pipe for Sprinklers (with 10% safety buffer) ---
     let softPeLength = Math.ceil((data.softPePipeLengthMeters || 0) * 1.1);
+    if (softPeLength > 0) softPeLength = Math.ceil(softPeLength / 25) * 25;
+
     if (softPeLength > 0) {
       const p = findPlannerItem("soft_pipe", "PE-Rohr weich 16mm");
       const priceFinal = p.price > 0 ? p.price : 0.9;
@@ -442,6 +449,8 @@ export default function Planner({
 
     // --- Tropfschläuche (Drip tubes) with 10% safety buffer ---
     let dripLength = Math.ceil((data.dripTubesMeters || 0) * 1.1);
+    if (dripLength > 0) dripLength = Math.ceil(dripLength / 25) * 25;
+
     if (dripLength > 0) {
       const p = findPlannerItem("drip_tube", "Tropfschlauch XFD 16mm");
       const priceFinal = p.price > 0 ? p.price : 1.2;

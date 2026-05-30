@@ -142,13 +142,19 @@ function findSafePath(start: Point, end: Point, avoidShapes: Shape[]): Point[] {
 function getNozzleData(rPx: number, angleDeg: number, selectedModel?: string) {
   let rMeters = rPx / PIXELS_PER_METER;
   
-  // Clean angle within 45 to 360
-  let normAngle = Math.max(45, Math.min(360, Math.round(angleDeg)));
+  // Clean angle within 0 to 360
+  let normAngle = Math.max(0, Math.min(360, Math.round(angleDeg)));
   
   // Choose base model based on selectedModel parameter or auto-detect
   let baseModel = selectedModel || 'auto';
   if (baseModel === 'auto') {
-    if (rMeters < 2.5) {
+    if (rMeters <= 1.2) {
+      baseModel = "PRO-4A";
+    } else if (rMeters <= 1.8) {
+      baseModel = "PRO-6A";
+    } else if (normAngle < 88 && rMeters <= 6.2) {
+      baseModel = "MP Corner";
+    } else if (rMeters < 2.5) {
       baseModel = "MP800SR";
     } else if (rMeters <= 4.5 && normAngle <= 105) {
       baseModel = "MP Corner";
@@ -175,7 +181,25 @@ function getNozzleData(rPx: number, angleDeg: number, selectedModel?: string) {
   let nozzleColor = "";
   let colorHex = "#1d4ed8"; // default blue
   
-  if (baseModel === "MP800SR") {
+  if (baseModel === "PRO-4A") {
+    nozzleId = "PRO-4A";
+    name = "PRO-4A Spray";
+    minR = 0.9;
+    maxR = 1.2;
+    minAngle = 0;
+    maxAngle = 360;
+    nozzleColor = "Hellgrün (Spray)";
+    colorHex = "#4ade80"; // green-400
+  } else if (baseModel === "PRO-6A") {
+    nozzleId = "PRO-6A";
+    name = "PRO-6A Spray";
+    minR = 1.2;
+    maxR = 1.8;
+    minAngle = 0;
+    maxAngle = 360;
+    nozzleColor = "Hellblau (Spray)";
+    colorHex = "#38bdf8"; // sky-400
+  } else if (baseModel === "MP800SR") {
     minR = 1.8;
     maxR = 3.5;
     if (normAngle >= 315) {
@@ -341,6 +365,8 @@ function getNozzleData(rPx: number, angleDeg: number, selectedModel?: string) {
     nozzleId: nozzleId,
     minR: minR,
     maxR: maxR,
+    minAngle: minAngle,
+    maxAngle: maxAngle,
     isOutOfBounds: isOutOfBounds,
     physicalAngle: physicalAngle,
     colorName: nozzleColor,
@@ -414,11 +440,74 @@ interface PlannerCanvasProps {
   setCurrentUser?: (user: any) => void;
 }
 
+function pointToSegmentDist(px: number, py: number, x1: number, y1: number, x2: number, y2: number) { let dx = x2 - x1; let dy = y2 - y1; let len2 = dx * dx + dy * dy; if (len2 === 0) return Math.hypot(px - x1, py - y1); let t = ((px - x1) * dx + (py - y1) * dy) / len2; t = Math.max(0, Math.min(1, t)); return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy)); }
+
+
+function rayIntersectSegment(px: number, py: number, rx: number, ry: number, x1: number, y1: number, x2: number, y2: number) {
+    const v1x = rx - px;
+    const v1y = ry - py;
+    const v2x = x2 - x1;
+    const v2y = y2 - y1;
+    const cross = v1x * v2y - v1y * v2x;
+    if (Math.abs(cross) < 1e-6) return Infinity;
+    
+    const t1 = ((x1 - px) * v2y - (y1 - py) * v2x) / cross;
+    const t2 = ((x1 - px) * v1y - (y1 - py) * v1x) / cross;
+    
+    if (t1 > 5 && t2 >= -0.01 && t2 <= 1.01) {
+        return t1;
+    }
+    return Infinity;
+}
+
+function getRaycastMaxR(px: number, py: number, angleStart: number, diff: number, sweepFlag: number, pts: any[]) {
+    let minDist = 10.7 * PIXELS_PER_METER;
+    const numRays = 30;
+    
+    for (let i = 0; i <= numRays; i++) {
+        let frac = i / numRays;
+        let angle = angleStart + (sweepFlag === 1 ? diff * frac : -diff * frac);
+        let rx = px + Math.cos(angle);
+        let ry = py + Math.sin(angle);
+        
+        let rayMinDist = Infinity;
+        for (let j = 0; j < pts.length; j++) {
+            let p1 = pts[j];
+            let p2 = pts[(j + 1) % pts.length];
+            let d = rayIntersectSegment(px, py, rx, ry, p1.x, p1.y, p2.x, p2.y);
+            if (d < rayMinDist) rayMinDist = d;
+        }
+        if (rayMinDist < minDist) {
+            minDist = rayMinDist;
+        }
+    }
+    return Math.min(Math.max(0.5 * PIXELS_PER_METER, minDist), 10.7 * PIXELS_PER_METER);
+}
 export default function PlannerCanvas({ onBack, onNext, initialState, currentUser, setCurrentUser }: PlannerCanvasProps) {
   const [step, setStep] = useState<PlannerStep>('start_choice');
 
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const scaleRef = useRef(1);
+  const panRef = useRef({ x: 0, y: 0 });
+
+  // Keep refs in sync for synchronous event handlers
+  useEffect(() => {
+    scaleRef.current = scale;
+  }, [scale]);
+  useEffect(() => {
+    panRef.current = pan;
+  }, [pan]);
+
+  const updatePan = (newPan: { x: number, y: number }) => {
+    panRef.current = newPan;
+    setPan(newPan);
+  };
+
+  const updateScale = (newScale: number) => {
+    scaleRef.current = newScale;
+    setScale(newScale);
+  };
   const [isPanning, setIsPanning] = useState(false);
   const [startPan, setStartPan] = useState({ x: 0, y: 0 });
   const [lastTouchDistance, setLastTouchDistance] = useState<number | null>(null);
@@ -441,6 +530,7 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
   const lastPointAddedTime = useRef<number>(0);
   const [showIntro, setShowIntro] = useState(false);
   const [showStats, setShowStats] = useState(true);
+  const [clipSprinklers, setClipSprinklers] = useState<boolean>(false);
 
   // States for manual planning
   const [manualPipes, setManualPipes] = useState<any[]>([]);
@@ -716,80 +806,97 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
          let minY = Math.min(...pts.map(p => p.y));
          let maxY = Math.max(...pts.map(p => p.y));
          let bboxMin = Math.min(maxX - minX, maxY - minY);
-         let targetR = Math.min(bboxMin, 10.7 * PIXELS_PER_METER);
-         if (targetR < 2 * PIXELS_PER_METER) targetR = 2 * PIXELS_PER_METER;
+         let baseTargetR = Math.min(bboxMin, 10.7 * PIXELS_PER_METER);
+          if (baseTargetR < 2 * PIXELS_PER_METER) baseTargetR = 2 * PIXELS_PER_METER;
 
-         for(let i=0; i<pts.length; i++) {
-             let pPrev = pts[(i - 1 + pts.length) % pts.length];
-             let pCurr = pts[i];
-             let pNext = pts[(i + 1) % pts.length];
-             
-             let aNext = Math.atan2(pNext.y - pCurr.y, pNext.x - pCurr.x);
-             let aPrev = Math.atan2(pPrev.y - pCurr.y, pPrev.x - pCurr.x);
-             
-             let sweepFlag = isClockwise ? 1 : 0;
-             let diff = isClockwise ? (aPrev - aNext) : (aNext - aPrev);
-             
-             while (diff <= 0) diff += 2 * Math.PI;
-             while (diff > 2 * Math.PI) diff -= 2 * Math.PI;
-             
-             let largeArc = diff > Math.PI ? 1 : 0;
-             let distNext = Math.hypot(pNext.x - pCurr.x, pNext.y - pCurr.y);
-             
-             const angleDeg = diff * 180 / Math.PI;
-             // Use targetR for corner radius, but if the edge is shorter, don't overshoot too much?
-             // Actually, targetR is based on bboxMin, which is safe for rectangles.
-             const nz = getNozzleData(targetR, angleDeg);
-             let r = nz.radiusPx;
-             
-             newSprinklers.push({
-                shapeId: s.id,
-                x: pCurr.x, 
-                y: pCurr.y, 
-                r: r,
-                angleStart: aNext,
-                angleEnd: aPrev,
-                sweepFlag: sweepFlag,
-                largeArc: largeArc,
-                angleDeg: (diff * 180 / Math.PI),
-                label: nz.name,
-                flowLpm: nz.flowLpm
-             });
+          for(let i=0; i<pts.length; i++) {
+              let pPrev = pts[(i - 1 + pts.length) % pts.length];
+              let pCurr = pts[i];
+              let pNext = pts[(i + 1) % pts.length];
+              
+              let distNext = Math.hypot(pNext.x - pCurr.x, pNext.y - pCurr.y);
+           let aNext = Math.atan2(pNext.y - pCurr.y, pNext.x - pCurr.x);
+           let aPrev = Math.atan2(pPrev.y - pCurr.y, pPrev.x - pCurr.x);
+           
+           let sweepFlag = isClockwise ? 1 : 0;
+           let diff = isClockwise ? (aPrev - aNext) : (aNext - aPrev);
+           
+           while (diff <= 0) diff += 2 * Math.PI;
+           while (diff > 2 * Math.PI) diff -= 2 * Math.PI;
+           
+           let targetR = getRaycastMaxR(pCurr.x, pCurr.y, aNext, diff, sweepFlag, pts);
+           
+           let largeArc = diff > Math.PI ? 1 : 0;
+           
+           const angleDeg = diff * 180 / Math.PI;
+           const nz = getNozzleData(targetR, angleDeg);
+           let r = nz.radiusPx;
+           
+           const physicalAngle = nz.physicalAngle;
+           let isFullCircle = physicalAngle >= 359;
+           let actualAngleEnd = isFullCircle ? Math.PI * 2 : (aNext + (physicalAngle * Math.PI / 180) * (sweepFlag === 1 ? 1 : -1));
+           while (actualAngleEnd < 0) actualAngleEnd += Math.PI * 2;
+           while (actualAngleEnd >= Math.PI * 2) actualAngleEnd -= Math.PI * 2;
+           let actualLargeArc = physicalAngle > 180 ? 1 : 0;
 
-             // Intermediate sprinklers along the edge
-             // Space them so that distance between them is approx `targetR`
-             if (distNext > targetR * 1.2) { 
-                 const numSegments = Math.ceil(distNext / targetR);
-                 const numIntermediate = numSegments - 1; 
-                 if (numIntermediate > 0) {
-                     const spacing = distNext / numSegments;
-                     for (let j = 1; j <= numIntermediate; j++) {
-                         let frac = j / numSegments;
-                         let midX = pCurr.x + (pNext.x - pCurr.x) * frac;
-                         let midY = pCurr.y + (pNext.y - pCurr.y) * frac;
-                         
-                         let lineAngle = Math.atan2(pNext.y - pCurr.y, pNext.x - pCurr.x);
-                         let midAngleStart = lineAngle;
-                         let midAngleEnd = lineAngle + Math.PI;
-                         if (!isClockwise) {
-                             midAngleStart = lineAngle + Math.PI;
-                             midAngleEnd = lineAngle;
-                         }
-                         const midNz = getNozzleData(spacing, 180);
-                         newSprinklers.push({
-                             shapeId: s.id,
-                             x: midX, y: midY, r: midNz.radiusPx,
-                             angleStart: midAngleStart,
-                             angleEnd: midAngleEnd,
-                             sweepFlag: isClockwise ? 1 : 0,
-                             largeArc: 0,
-                             angleDeg: 180,
-                             label: midNz.name,
-                             flowLpm: midNz.flowLpm
-                         });
-                     }
-                 }
-              }
+           let actualId = s.id + "-" + i + "-" + Date.now();
+           newSprinklers.push({
+              shapeId: s.id,
+              id: "sp-auto-" + actualId,
+              x: pCurr.x, 
+              y: pCurr.y, 
+              r: r,
+              angleStart: aNext,
+              angleEnd: isFullCircle ? Math.PI * 2 : actualAngleEnd,
+              sweepFlag: sweepFlag,
+              largeArc: actualLargeArc,
+              angleDeg: physicalAngle,
+              label: nz.name,
+              flowLpm: nz.flowLpm,
+              isManual: true,
+              zoneColor: nz.colorHex
+           });
+
+           let currentEdgePos = r * 1.4; 
+           let j = 1;
+
+           let sanity = 0;
+           while (currentEdgePos < distNext - (r * 0.7) && sanity < 50) {
+               sanity++;
+               let frac = currentEdgePos / distNext;
+               let midX = pCurr.x + (pNext.x - pCurr.x) * frac;
+               let midY = pCurr.y + (pNext.y - pCurr.y) * frac;
+               
+               let lineAngle = Math.atan2(pNext.y - pCurr.y, pNext.x - pCurr.x);
+               let midAngleStart = lineAngle;
+               let midAngleEnd = lineAngle + Math.PI;
+               if (!isClockwise) {
+                   midAngleStart = lineAngle + Math.PI;
+                   midAngleEnd = lineAngle;
+               }
+               
+               let midDiff = Math.PI; 
+               let midTargetR = getRaycastMaxR(midX, midY, midAngleStart, midDiff, isClockwise ? 1 : 0, pts);
+               
+               const midNz = getNozzleData(midTargetR, 180);
+               newSprinklers.push({
+                   shapeId: s.id,
+                   id: "sp-auto-mid-" + actualId + "-" + j,
+                   x: midX, y: midY, r: midNz.radiusPx,
+                   angleStart: midAngleStart,
+                   angleEnd: midAngleEnd,
+                   sweepFlag: isClockwise ? 1 : 0,
+                   largeArc: 0,
+                   angleDeg: 180,
+                   label: midNz.name,
+                   flowLpm: midNz.flowLpm,
+                   isManual: true,
+                   zoneColor: midNz.colorHex
+               });
+               
+               currentEdgePos += (midNz.radiusPx * 1.4);
+               j++;
+           }
          }
          
          // Inner 360 degree sprinklers for large lawns
@@ -808,10 +915,10 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
          };
 
          // If BOTH dimensions are larger than 2x the target radius, we need middle sprinklers
-         if (width > 2.2 * targetR && height > 2.2 * targetR) {
+         if (width > 2.2 * baseTargetR && height > 2.2 * baseTargetR) {
              // simplified: fill a grid inside
-             let cols = Math.floor(width / targetR);
-             let rows = Math.floor(height / targetR);
+             let cols = Math.floor(width / baseTargetR);
+             let rows = Math.floor(height / baseTargetR);
              for(let c=1; c<cols; c++) {
                  for(let rIdx=1; rIdx<rows; rIdx++) {
                      let cx = minX + c * (width/cols);
@@ -1155,7 +1262,9 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
        if (s.type === 'circle' && pts.length === 2) {
            const [center, edge] = pts;
            const rPx = Math.hypot(edge.x - center.x, edge.y - center.y);
-           const nz = getNozzleData(rPx, 360);
+           let targetR = getRaycastMaxR(center.x, center.y, 0, Math.PI * 2, 1, pts);
+           if (targetR > rPx) targetR = rPx;
+           const nz = getNozzleData(targetR, 360);
            newSprinklers.push({
                shapeId: s.id,
                id: 'sp-auto-' + s.id + '-' + Date.now(),
@@ -1180,10 +1289,54 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
        let maxX = Math.max(...pts.map(p => p.x));
        let minY = Math.min(...pts.map(p => p.y));
        let maxY = Math.max(...pts.map(p => p.y));
-       let bboxMin = Math.min(maxX - minX, maxY - minY);
-       let targetR = Math.min(bboxMin, 10.7 * PIXELS_PER_METER);
-       if (targetR < 2 * PIXELS_PER_METER) targetR = 2 * PIXELS_PER_METER;
+       
+       const isInside = (pt: Point) => {
+            let inside = false;
+            for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+                let xi = pts[i].x, yi = pts[i].y;
+                let xj = pts[j].x, yj = pts[j].y;
+                let intersect = ((yi > pt.y) !== (yj > pt.y)) && (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+       };
 
+       let candidates: any[] = [];
+       const uuid = () => Math.random().toString(36).substring(2, 9);
+       
+       const addCandidate = (cx: number, cy: number, aStart: number, sweepF: number, diff: number, idSuffix: string) => {
+           let targetR = getRaycastMaxR(cx, cy, aStart, diff, sweepF, pts);
+           const angleDeg = diff * 180 / Math.PI;
+           const nz = getNozzleData(targetR, angleDeg);
+           let r = nz.radiusPx;
+           
+           const physicalAngle = nz.physicalAngle;
+           let isFullCircle = physicalAngle >= 359;
+           let actualAngleEnd = isFullCircle ? Math.PI * 2 : (aStart + (physicalAngle * Math.PI / 180) * (sweepF === 1 ? 1 : -1));
+           while (actualAngleEnd < 0) actualAngleEnd += Math.PI * 2;
+           while (actualAngleEnd >= Math.PI * 2) actualAngleEnd -= Math.PI * 2;
+           let actualLargeArc = physicalAngle > 180 ? 1 : 0;
+
+           candidates.push({
+              shapeId: s.id,
+              id: 'sp-auto-' + s.id + '-' + idSuffix + '-' + uuid(),
+              x: cx, 
+              y: cy, 
+              r: r,
+              angleStart: aStart,
+              angleEnd: isFullCircle ? Math.PI * 2 : actualAngleEnd,
+              sweepFlag: sweepF,
+              largeArc: actualLargeArc,
+              angleDeg: physicalAngle,
+              label: nz.name,
+              flowLpm: nz.flowLpm,
+              isManual: true,
+              zoneColor: nz.colorHex,
+              diff: diff
+           });
+       };
+
+       // Schritt 1: Ecken setzen
        for(let i=0; i<pts.length; i++) {
            let pPrev = pts[(i - 1 + pts.length) % pts.length];
            let pCurr = pts[i];
@@ -1198,66 +1351,128 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
            while (diff <= 0) diff += 2 * Math.PI;
            while (diff > 2 * Math.PI) diff -= 2 * Math.PI;
            
-           let largeArc = diff > Math.PI ? 1 : 0;
+           // Skip sharp corners < 45 degrees, as they are usually too small and better covered by overlap/overspray
+           if (diff < 45 * Math.PI / 180) {
+               continue;
+           }
+           
+           addCandidate(pCurr.x, pCurr.y, aNext, sweepFlag, diff, "corner-" + i);
+       }
+
+       // Schritt 2: Kanten auffüllen
+       for(let i=0; i<pts.length; i++) {
+           let pCurr = pts[i];
+           let pNext = pts[(i + 1) % pts.length];
            let distNext = Math.hypot(pNext.x - pCurr.x, pNext.y - pCurr.y);
            
-           const angleDeg = diff * 180 / Math.PI;
-           const nz = getNozzleData(targetR, angleDeg);
-           let r = nz.radiusPx;
+           let lineAngle = Math.atan2(pNext.y - pCurr.y, pNext.x - pCurr.x);
+           let midAngleStart = lineAngle;
+           let sweepF = isClockwise ? 1 : 0;
+           if (!isClockwise) {
+               midAngleStart = lineAngle + Math.PI;
+           }
+           let diff = Math.PI; 
            
-           newSprinklers.push({
-              shapeId: s.id,
-              id: 'sp-auto-' + s.id + '-' + i + '-' + Date.now(),
-              x: pCurr.x, 
-              y: pCurr.y, 
-              r: r,
-              angleStart: aNext,
-              angleEnd: aPrev,
-              sweepFlag: sweepFlag,
-              largeArc: largeArc,
-              angleDeg: (diff * 180 / Math.PI),
-              label: nz.name,
-              flowLpm: nz.flowLpm,
-              isManual: true,
-              zoneColor: nz.colorHex
-           });
+           let midTargetR = getRaycastMaxR(pCurr.x, pCurr.y, midAngleStart, diff, sweepF, pts); 
+           let estRadius = Math.max(0.9 * PIXELS_PER_METER, midTargetR);
+           
+           let currentEdgePos = estRadius * 1.0; 
+           let j = 1;
+           let sanity = 0;
+           
+           while (currentEdgePos < distNext - (estRadius * 0.7) && sanity < 50) {
+               sanity++;
+               let frac = currentEdgePos / distNext;
+               let midX = pCurr.x + (pNext.x - pCurr.x) * frac;
+               let midY = pCurr.y + (pNext.y - pCurr.y) * frac;
+               
+               addCandidate(midX, midY, midAngleStart, sweepF, diff, "edge-" + i + "-" + j);
+               
+               let actualR = candidates[candidates.length-1].r;
+               currentEdgePos += (actualR * 1.0);
+               j++;
+           }
+       }
+       
+       // Schritt 3: Mitte prüfen
+       let step = 4 * PIXELS_PER_METER;
+       for(let x = minX + step; x < maxX; x += step) {
+           for(let y = minY + step; y < maxY; y += step) {
+               if (isInside({x, y})) {
+                   addCandidate(x, y, 0, 1, Math.PI * 2, "center");
+               }
+           }
+       }
 
-           if (distNext > targetR * 1.2) { 
-               const numSegments = Math.ceil(distNext / targetR);
-               const numIntermediate = numSegments - 1; 
-               if (numIntermediate > 0) {
-                   const spacing = distNext / numSegments;
-                   for (let j = 1; j <= numIntermediate; j++) {
-                       let frac = j / numSegments;
-                       let midX = pCurr.x + (pNext.x - pCurr.x) * frac;
-                       let midY = pCurr.y + (pNext.y - pCurr.y) * frac;
-                       
-                       let lineAngle = Math.atan2(pNext.y - pCurr.y, pNext.x - pCurr.x);
-                       let midAngleStart = lineAngle;
-                       let midAngleEnd = lineAngle + Math.PI;
-                       if (!isClockwise) {
-                           midAngleStart = lineAngle + Math.PI;
-                           midAngleEnd = lineAngle;
-                       }
-                       const midNz = getNozzleData(spacing, 180);
-                       newSprinklers.push({
-                           shapeId: s.id,
-                           id: 'sp-auto-mid-' + s.id + '-' + i + '-' + j + '-' + Date.now(),
-                           x: midX, y: midY, r: midNz.radiusPx,
-                           angleStart: midAngleStart,
-                           angleEnd: midAngleEnd,
-                           sweepFlag: isClockwise ? 1 : 0,
-                           largeArc: 0,
-                           angleDeg: 180,
-                           label: midNz.name,
-                           flowLpm: midNz.flowLpm,
-                           isManual: true,
-                           zoneColor: midNz.colorHex
-                       });
+       // Helper coverage
+       const isCovered = (px: number, py: number, sp: any) => {
+           let dist = Math.hypot(px - sp.x, py - sp.y);
+           if (dist > sp.r) return false;
+           if (sp.angleDeg >= 359) return true;
+           let angleToPt = Math.atan2(py - sp.y, px - sp.x);
+           
+           let aStart = sp.angleStart;
+           let diff = sp.diff;
+           let aEnd = sp.sweepFlag === 1 ? aStart + diff : aStart - diff;
+           
+           let a = angleToPt;
+           while (a < 0) a += 2*Math.PI; while (a >= 2*Math.PI) a -= 2*Math.PI;
+           let start = aStart;
+           while (start < 0) start += 2*Math.PI; while (start >= 2*Math.PI) start -= 2*Math.PI;
+           let end = aEnd;
+           while (end < 0) end += 2*Math.PI; while (end >= 2*Math.PI) end -= 2*Math.PI;
+           
+           if (sp.sweepFlag === 1) {
+               if (start < end) { return a >= start && a <= end; }
+               else { return a >= start || a <= end; }
+           } else {
+               if (start > end) { return a <= start && a >= end; }
+               else { return a <= start || a >= end; }
+           }
+       };
+
+       let testPoints: any[] = [];
+       let evalStep = 1.0 * PIXELS_PER_METER; 
+       for(let x = minX; x <= maxX; x += evalStep) {
+           for(let y = minY; y <= maxY; y += evalStep) {
+               if (isInside({x, y})) {
+                   testPoints.push({x, y});
+               }
+           }
+       }
+
+       // Schritt 4: unnötige Regner entfernen
+       let getCoverage = (sprinklerList: any[]) => {
+           if (testPoints.length === 0) return 1;
+           let coveredCount = 0;
+           for(let pt of testPoints) {
+               for(let sp of sprinklerList) {
+                   if (isCovered(pt.x, pt.y, sp)) {
+                       coveredCount++;
+                       break;
                    }
                }
-            }
+           }
+           return coveredCount / testPoints.length;
+       };
+
+       let finalSprinklers = [...candidates];
+       
+       for(let i = finalSprinklers.length - 1; i >= 0; i--) {
+           let testList = [...finalSprinklers];
+           testList.splice(i, 1);
+           
+           let cov = getCoverage(testList);
+           if (cov >= 0.98) {
+               finalSprinklers.splice(i, 1);
+           }
        }
+
+       finalSprinklers.forEach(sp => {
+           delete sp.diff;
+       });
+
+       newSprinklers.push(...finalSprinklers);
     });
 
     setSprinklers(newSprinklers);
@@ -1663,8 +1878,8 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
   const getMouseCoords = (clientX: number, clientY: number): Point | null => {
     if (!svgRef.current) return null;
     const rect = svgRef.current.getBoundingClientRect();
-    const x = (clientX - rect.left - pan.x) / scale;
-    const y = (clientY - rect.top - pan.y) / scale;
+    const x = (clientX - rect.left - panRef.current.x) / scaleRef.current;
+    const y = (clientY - rect.top - panRef.current.y) / scaleRef.current;
     return { x, y };
   };
 
@@ -1722,9 +1937,8 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
           
           // Determine the min allowed angle for the current radius and nozzle selection
           const testNz = getNozzleData(sp.r, 45, sp.selectedModel || 'auto');
-          const minAngleAllowed = (testNz.model === 'MP Corner' || testNz.model === 'MP-Corner') ? 45 : 90;
           
-          newAngleDeg = Math.max(minAngleAllowed, Math.min(360, newAngleDeg));
+          newAngleDeg = Math.max(testNz.minR !== undefined ? testNz.minAngle : 0, Math.min(360, newAngleDeg));
           
           const nz = getNozzleData(sp.r, newAngleDeg, sp.selectedModel || 'auto');
           const physicalAngle = nz.physicalAngle;
@@ -1759,9 +1973,8 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
           
           // Determine the min allowed angle for the current radius and nozzle selection
           const testNz = getNozzleData(sp.r, 45, sp.selectedModel || 'auto');
-          const minAngleAllowed = (testNz.model === 'MP Corner' || testNz.model === 'MP-Corner') ? 45 : 90;
           
-          newAngleDeg = Math.max(minAngleAllowed, Math.min(360, newAngleDeg));
+          newAngleDeg = Math.max(testNz.minR !== undefined ? testNz.minAngle : 0, Math.min(360, newAngleDeg));
           
           const nz = getNozzleData(sp.r, newAngleDeg, sp.selectedModel || 'auto');
           const physicalAngle = nz.physicalAngle;
@@ -1836,6 +2049,7 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
 
     const coords = getMouseCoords(e.clientX, e.clientY);
     if (!coords) return;
+    setHoverPos(coords);
 
     if (tool === 'rectangle' || tool === 'circle') {
       setCurrentShape([coords, coords]);
@@ -1864,11 +2078,12 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
       
       // Auto-start panning if dragging on a touch screen
       if (!touchState.current.isPanning && (e.pointerType === 'touch' || e.pointerType === 'pen')) {
-         if (tool === 'polygon' || tool === 'water_source' || tool === 'controller' || tool === 'valve_box' || tool === 'select') {
+         if (tool !== 'rectangle' && tool !== 'circle') {
              touchState.current.isPanning = true;
              touchState.current.startPan = { x: e.clientX - pan.x, y: e.clientY - pan.y };
              setIsPanning(true);
              setStartPan(touchState.current.startPan);
+             try { e.currentTarget.setPointerCapture(e.pointerId); } catch(err){}
          }
       }
     }
@@ -1876,7 +2091,7 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
     if (touchState.current.isPanning) {
       if (activePointers.current.size <= 1) {
         // use setPan with callback to avoid stale pan if needed, but absolute computation is fine:
-        setPan({ x: e.clientX - touchState.current.startPan.x, y: e.clientY - touchState.current.startPan.y });
+        updatePan({ x: e.clientX - touchState.current.startPan.x, y: e.clientY - touchState.current.startPan.y });
       }
       return;
     }
@@ -1921,6 +2136,7 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
       if (isPanning || wasPanning || wasZooming) {
         setIsPanning(false);
         e.currentTarget.releasePointerCapture(e.pointerId);
+        if (e.pointerType === 'touch') setHoverPos(null);
         return;
       }
       
@@ -1931,6 +2147,7 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
       
       const coords = getMouseCoords(e.clientX, e.clientY);
       if (!coords) return;
+      setHoverPos(coords);
 
       if (tool === 'polygon' && !touchState.current.moved) {
         // Prevent registering a point if clicked/tapped too quickly (duplicate pointer/touch browser event prevention)
@@ -2043,12 +2260,12 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     
-    const s = clampedScale / scale;
-    setPan({
-      x: mouseX - (mouseX - pan.x) * s,
-      y: mouseY - (mouseY - pan.y) * s
+    const s = clampedScale / scaleRef.current;
+    updatePan({
+      x: mouseX - (mouseX - panRef.current.x) * s,
+      y: mouseY - (mouseY - panRef.current.y) * s
     });
-    setScale(clampedScale);
+    updateScale(clampedScale);
   };
 
   // Touch zooming (pinch)
@@ -2088,13 +2305,13 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
         const scaleChange = newScale / scale;
         
         // Combine panning distance with zoom offset
-        setPan({
-          x: mouseX - (mouseX - pan.x - deltaX) * scaleChange,
-          y: mouseY - (mouseY - pan.y - deltaY) * scaleChange
+        updatePan({
+          x: mouseX - (mouseX - panRef.current.x - deltaX) * scaleChange,
+          y: mouseY - (mouseY - panRef.current.y - deltaY) * scaleChange
         });
       }
       
-      setScale(newScale);
+      updateScale(newScale);
       setLastTouchDistance(dist);
       setLastTouchCenter({ x: cx, y: cy });
     }
@@ -2756,6 +2973,23 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
                     </div>
                   ) : (
                   <div className="p-4 space-y-4 text-sm max-h-[calc(100vh-14rem)] overflow-y-auto">
+                    {/* Visualisierungseinstellungen */}
+                    <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-xs space-y-2 font-sans">
+                      <span className="text-xs text-slate-500 font-extrabold tracking-wide block font-sans uppercase">Darstellungs-Option</span>
+                      <label className="flex items-center gap-2.5 cursor-pointer text-xs font-bold text-slate-700 select-none">
+                        <input
+                          type="checkbox"
+                          checked={clipSprinklers}
+                          onChange={(e) => setClipSprinklers(e.target.checked)}
+                          className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500 accent-emerald-600 cursor-pointer"
+                        />
+                        <span>Schnittmaske aktivieren</span>
+                      </label>
+                      <p className="text-[10px] text-slate-400 font-medium leading-normal">
+                        Schneidet den Sprühbereich an den Rasenkanten ab. Deaktiviert zeigt es den <strong>realen Sprühsektor</strong> des Regners (z.B. exakt 90°), um das Übersprühen (Over-Spray) über den Rand hinaus sichtbar zu machen.
+                      </p>
+                    </div>
+
                     {/* Collapsible Section 1: Parameters */}
                     <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm font-sans">
                       <button
@@ -3014,6 +3248,7 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerLeave={handlePointerUp}
+            onPointerCancel={handlePointerUp}
             onWheel={handleWheel}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
@@ -3249,7 +3484,7 @@ export default function PlannerCanvas({ onBack, onNext, initialState, currentUse
                     className="cursor-pointer"
                  >
                   {/* Sprinkler spray area */}
-                  <g clipPath={sp.shapeId ? `url(#clip-${sp.shapeId})` : undefined}>
+                  <g clipPath={clipSprinklers && sp.shapeId ? `url(#clip-${sp.shapeId})` : undefined}>
                     <g transform={`translate(${sp.x}, ${sp.y})`}>
                       {isFullCircle ? (
                         <circle cx="0" cy="0" r={sp.r} className={`${isSelected ? 'fill-sky-400/25 stroke-sky-500' : 'fill-blue-400/20 stroke-blue-500'} pointer-events-none transition-all`} strokeWidth={1.5/scale} />
