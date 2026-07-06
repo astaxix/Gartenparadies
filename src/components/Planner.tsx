@@ -1643,8 +1643,9 @@ export default function Planner({
               )}
 
               {/* Ordering / Checkout button section */}
-              <div className="mt-6 border-t border-dashed border-gray-100 pt-6 flex flex-col sm:flex-row justify-end gap-4 print:hidden">
+              <div className="mt-6 border-t border-dashed border-gray-100 pt-6 flex flex-col sm:flex-row justify-end gap-4 print:hidden relative z-10">
                 <button
+                  type="button"
                   onClick={() => {
                     if (!currentUser) {
                       setIsPlannerAuthModalOpen(true);
@@ -1661,6 +1662,7 @@ export default function Planner({
                   Plan speichern
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     if (!isReducedPressureValid()) {
                       setReducedPressureError(
@@ -2174,6 +2176,73 @@ export default function Planner({
             </div>
           )}
         </AnimatePresence>
+
+      {/* Save Plan Modal */}
+      <AnimatePresence>
+        {isSaveModalOpen && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans animate-in fade-in duration-200">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-150 p-6 space-y-4"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="w-6 h-6 text-emerald-600" />
+                <h3 className="text-lg font-bold text-gray-900">
+                  Plan speichern
+                </h3>
+              </div>
+
+              {saveSuccess ? (
+                <div className="py-6 text-center space-y-2">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <Check className="w-6 h-6" />
+                  </div>
+                  <h4 className="font-bold text-emerald-800">
+                    Plan erfolgreich gespeichert!
+                  </h4>
+                  <p className="text-gray-500 text-xs">
+                    Du kannst diesen Plan jederzeit über dein Profil aufrufen.
+                  </p>
+                </div>
+              ) : (
+                <form onSubmit={handlePlannerSaveConfirm} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-gray-500 uppercase">
+                      Name des Plans
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={savePlanName}
+                      onChange={(e) => setSavePlanName(e.target.value)}
+                      placeholder="z.B. Mein Vorgarten"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium text-gray-805 text-gray-800 text-sm"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsSaveModalOpen(false)}
+                      className="px-4 py-2.5 bg-gray-105 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition cursor-pointer"
+                    >
+                      Abbrechen
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition shadow-md cursor-pointer"
+                    >
+                      Speichern
+                    </button>
+                  </div>
+                </form>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
         {/* Planner Registration & Login Auth Modal */}
         <AnimatePresence>
@@ -2695,6 +2764,73 @@ export default function Planner({
                   ))
                 )}
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Save Plan Modal */}
+      <AnimatePresence>
+        {isSaveModalOpen && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 font-sans animate-in fade-in duration-200">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-gray-150 p-6 space-y-4"
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <FileText className="w-6 h-6 text-emerald-600" />
+                <h3 className="text-lg font-bold text-gray-900">
+                  Plan speichern
+                </h3>
+              </div>
+
+              {saveSuccess ? (
+                <div className="py-6 text-center space-y-2">
+                  <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <Check className="w-6 h-6" />
+                  </div>
+                  <h4 className="font-bold text-emerald-800">
+                    Plan erfolgreich gespeichert!
+                  </h4>
+                  <p className="text-gray-500 text-xs">
+                    Du kannst diesen Plan jederzeit über dein Profil aufrufen.
+                  </p>
+                </div>
+              ) : (
+                <form onSubmit={handlePlannerSaveConfirm} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-gray-500 uppercase">
+                      Name des Plans
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={savePlanName}
+                      onChange={(e) => setSavePlanName(e.target.value)}
+                      placeholder="z.B. Mein Vorgarten"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium text-gray-805 text-gray-800 text-sm"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsSaveModalOpen(false)}
+                      className="px-4 py-2.5 bg-gray-105 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition cursor-pointer"
+                    >
+                      Abbrechen
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition shadow-md cursor-pointer"
+                    >
+                      Speichern
+                    </button>
+                  </div>
+                </form>
+              )}
             </motion.div>
           </div>
         )}

@@ -1,12 +1,32 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import fs from 'fs';
 import {defineConfig, loadEnv} from 'vite';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(), 
+      tailwindcss(),
+      {
+        name: 'firebase-config-fallback',
+        resolveId(id) {
+          if (id.endsWith('firebase-applet-config.json')) {
+            const file = path.resolve(__dirname, 'firebase-applet-config.json');
+            if (!fs.existsSync(file)) {
+              return '\0virtual-firebase-config';
+            }
+          }
+        },
+        load(id) {
+          if (id === '\0virtual-firebase-config') {
+            return `export default {}`;
+          }
+        }
+      }
+    ],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
     },

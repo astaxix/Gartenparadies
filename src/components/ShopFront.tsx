@@ -332,15 +332,15 @@ export default function ShopFront({
           <div className="flex items-center justify-between md:gap-8 relative w-full h-12 sm:h-14 md:h-auto">
           
           {/* Menu and Logo Box */}
-          <div className="flex items-center gap-4 md:gap-8 shrink-0 z-50">
+          <div className={`flex items-center gap-4 md:gap-8 shrink-0 ${isCategoryMenuOpen ? 'z-50' : 'z-20'}`}>
             {/* Category Menu */}
             <div ref={categoryMenuRef} className="relative shrink-0">
               <button 
                 onClick={() => setIsCategoryMenuOpen(!isCategoryMenuOpen)}
-                className="p-2 md:p-3 flex items-center gap-2 hover:bg-emerald-50 rounded-xl transition-all text-[#152B4B] md:bg-gray-50 md:border md:border-gray-200 shadow-sm hover:shadow hover:scale-105"
+                className="p-1.5 md:p-2 flex items-center gap-2 hover:bg-emerald-50 rounded-lg transition-all text-[#152B4B] md:bg-gray-50 md:border md:border-gray-200 shadow-sm"
               >
-                <Menu className="w-9 h-9 md:w-11 md:h-11 text-[#152B4B]" strokeWidth={2.5} />
-                <span className="hidden lg:block font-bold text-lg pr-2 text-[#152B4B]">Kategorien</span>
+                <Menu className="w-6 h-6 md:w-7 md:h-7 text-[#152B4B]" strokeWidth={2} />
+                <span className="hidden lg:block font-bold text-sm pr-2 text-[#152B4B] pt-0.5">Kategorien</span>
               </button>
               
               <AnimatePresence>
@@ -496,7 +496,7 @@ export default function ShopFront({
           </div>
 
           {/* Desktop Search Bar */}
-          <div ref={desktopSearchRef} className="flex-1 hidden md:block max-w-3xl px-4 xl:px-8 relative z-50 transition-all duration-300 mx-auto">
+          <div ref={desktopSearchRef} className={`flex-1 hidden md:block max-w-3xl px-4 xl:px-8 relative transition-all duration-300 mx-auto ${isSearchFocused ? 'z-50' : 'z-20'}`}>
             <div className="relative flex items-center w-full shadow-sm border border-gray-200 bg-white rounded-full overflow-hidden focus-within:border-emerald-400 focus-within:ring-2 focus-within:ring-emerald-100 transition-all">
               <Search className="w-5 h-5 md:w-6 md:h-6 text-gray-400 absolute left-4" />
               <input 
@@ -556,7 +556,7 @@ export default function ShopFront({
           </div>
 
           {/* Actions (Right) */}
-          <div className="flex items-center gap-3 sm:gap-6 shrink-0 relative z-50">
+          <div className={`flex items-center gap-3 sm:gap-6 shrink-0 relative ${isUserDropdownOpen ? 'z-50' : 'z-20'}`}>
             <button 
               className="relative flex items-center justify-center p-1 text-[#4A8EC3] hover:text-emerald-600 transition-colors"
               onClick={onOpenCart}
@@ -720,7 +720,7 @@ export default function ShopFront({
         </div>
         
         {/* Mobile Search Bar - moved into header */}
-        <div ref={mobileSearchRef} className="md:hidden mt-3 w-full relative z-30">
+        <div ref={mobileSearchRef} className={`md:hidden mt-3 w-full relative ${isSearchFocused ? 'z-50' : 'z-20'}`}>
           <div className="relative flex items-center w-full shadow-sm border border-gray-200 bg-white rounded-full overflow-hidden focus-within:border-emerald-400 focus-within:ring-2 focus-within:ring-emerald-100 transition-all">
             <Search className="w-5 h-5 text-gray-400 absolute left-4" />
             <input 
